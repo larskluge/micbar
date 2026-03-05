@@ -54,7 +54,8 @@ class MicBar(rumps.App):
         text = self._stop_and_get_text()
         if text:
             subprocess.run(["pbcopy"], input=text, text=True)
-            rumps.notification("Mic", "", "Copied to clipboard")
+            preview = text[:80] + ("…" if len(text) > 80 else "")
+            rumps.notification("Copied to clipboard", "", preview)
 
     def stop_improve(self, _):
         text = self._stop_and_get_text()
@@ -68,7 +69,8 @@ class MicBar(rumps.App):
             )
             improved = result.stdout.strip() or text
             subprocess.run(["pbcopy"], input=improved, text=True)
-            rumps.notification("Mic", "", "Improved & copied to clipboard")
+            preview = improved[:80] + ("…" if len(improved) > 80 else "")
+            rumps.notification("Improved & copied to clipboard", "", preview)
 
 
 if __name__ == "__main__":
