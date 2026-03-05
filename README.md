@@ -5,7 +5,7 @@ macOS menu bar app for speech-to-text. Click to record, stop to get a transcript
 ## Prerequisites
 
 - Python 3.14+
-- `mictotext` on PATH — speech-to-text CLI
+- [`mictotext`](https://github.com/larskluge/mictotext) on PATH — speech-to-text CLI
 - `improve-writing` on PATH — text post-processing CLI (optional, for the "Improve" action)
 
 ## Setup
