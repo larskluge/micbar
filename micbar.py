@@ -5,6 +5,7 @@ import rumps
 import subprocess
 import signal
 import os
+import threading
 
 
 class MicBar(rumps.App):
@@ -37,17 +38,40 @@ class MicBar(rumps.App):
         self.proc = subprocess.Popen(
             ["mictotext"],
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             preexec_fn=os.setsid,
         )
-        self._set_recording(True)
+        self.title = "\u23F3"
+        self.menu["Start Recording"].set_callback(None)
+        self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
+        self.menu["Stop -> Improve -> Clipboard"].set_callback(self.stop_improve)
+        threading.Thread(target=self._wait_for_ready, daemon=True).start()
+
+    def _wait_for_ready(self):
+        proc = self.proc
+        try:
+            for line in proc.stderr:
+                if b"Recording now" in line:
+                    self.title = "\U0001F534"
+                    break
+            # Drain remaining stderr
+            for _ in proc.stderr:
+                pass
+        except Exception:
+            pass
+
+    def _notify(self, title, body):
+        subprocess.run([
+            "osascript", "-e",
+            f'display notification "{body}" with title "{title}"',
+        ])
 
     def _stop_and_get_text(self):
         if not self.proc:
             return None
-        # Send SIGINT to the process group (same as Ctrl-C)
         os.killpg(os.getpgid(self.proc.pid), signal.SIGINT)
-        stdout, _ = self.proc.communicate(timeout=30)
+        stdout = self.proc.stdout.read()
+        self.proc.wait(timeout=30)
         self.proc = None
         self._set_recording(False)
         return stdout.decode().strip()
@@ -57,7 +81,7 @@ class MicBar(rumps.App):
         if text:
             subprocess.run(["pbcopy"], input=text, text=True)
             preview = text[:80] + ("…" if len(text) > 80 else "")
-            rumps.notification("Copied to clipboard", "", preview)
+            self._notify("Copied to clipboard", preview)
 
     def stop_improve(self, _):
         text = self._stop_and_get_text()
@@ -72,7 +96,7 @@ class MicBar(rumps.App):
             improved = result.stdout.strip() or text
             subprocess.run(["pbcopy"], input=improved, text=True)
             preview = improved[:80] + ("…" if len(improved) > 80 else "")
-            rumps.notification("Improved & copied to clipboard", "", preview)
+            self._notify("Improved & copied to clipboard", preview)
 
 
 if __name__ == "__main__":
