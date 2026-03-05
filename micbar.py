@@ -48,7 +48,6 @@ class MicBar(rumps.App):
         super().__init__("MicBar", icon=ICON_MIC, template=True, quit_button=None)
         self.proc = None
         self._record_start_time = None
-        self._logged_proc_tree = False
         log.info("MicBar initialized")
 
         self.menu = [
@@ -86,8 +85,8 @@ class MicBar(rumps.App):
             preexec_fn=os.setsid,
         )
         log.info("start: mictotext PID=%d", self.proc.pid)
-        if not self._logged_proc_tree:
-            threading.Thread(target=self._log_proc_tree, args=(self.proc.pid,), daemon=True).start()
+
+        threading.Thread(target=self._log_proc_tree, args=(self.proc.pid,), daemon=True).start()
         self._set_icon(ICON_WAIT)
         self.menu["Start Recording"].set_callback(None)
         self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
@@ -117,7 +116,7 @@ class MicBar(rumps.App):
                 capture_output=True, text=True
             )
             log.info("process tree:\n%s", result3.stdout)
-            self._logged_proc_tree = True
+
         except Exception as e:
             log.exception("_log_proc_tree error: %s", e)
 
