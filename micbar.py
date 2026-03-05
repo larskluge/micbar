@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 import rumps
 import subprocess
 import signal
