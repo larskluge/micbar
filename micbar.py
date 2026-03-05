@@ -1,4 +1,4 @@
-#!/Users/l/projects/mic-bar/venv/bin/python3
+#!/Users/l/projects/micbar/venv/bin/python3
 import rumps
 import subprocess
 import signal

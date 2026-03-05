@@ -6,8 +6,8 @@
 	<string>com.aekym.micbar</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/l/projects/mic-bar/venv/bin/python3</string>
-		<string>/Users/l/projects/mic-bar/mic_bar.py</string>
+		<string>/Users/l/projects/micbar/venv/bin/python3</string>
+		<string>/Users/l/projects/micbar/micbar.py</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>

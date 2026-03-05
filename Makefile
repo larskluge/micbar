@@ -14,4 +14,4 @@ restart:
 	launchctl load $(AGENTS_DIR)/$(PLIST)
 
 run:
-	./venv/bin/python3 mic_bar.py
+	./venv/bin/python3 micbar.py
