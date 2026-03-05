@@ -147,42 +147,45 @@ class MicBar(rumps.App):
         rc = self.proc.wait(timeout=30)
         log.info("mictotext exited rc=%d", rc)
         self.proc = None
-        self._set_recording(False)
         text = stdout.decode().strip()
         log.info("transcription (%d chars): %s", len(text), text[:200])
         return text
 
-    def stop_copy(self, _):
+    def _stop_and_finish(self, postprocess=None):
         self.title = ICON_WAIT
-        log.info("stop_copy called")
-        text = self._stop_and_get_text()
-        if text:
-            subprocess.run(["pbcopy"], input=text, text=True)
-            preview = text[:80] + ("…" if len(text) > 80 else "")
-            self._notify("Copied to clipboard", preview)
-            log.info("copied to clipboard, notified")
-        else:
-            log.warning("no text from transcription")
-            self._notify("Recording", "No speech detected")
-        self.title = ICON_MIC
+        self._set_recording(False)
+        def work():
+            log.info("stop called (improve=%s)", postprocess is not None)
+            text = self._stop_and_get_text()
+            if text and postprocess:
+                text = postprocess(text)
+            if text:
+                subprocess.run(["pbcopy"], input=text, text=True)
+                preview = text[:80] + ("…" if len(text) > 80 else "")
+                label = "Improved & copied to clipboard" if postprocess else "Copied to clipboard"
+                self._notify(label, preview)
+                log.info("copied to clipboard, notified")
+            else:
+                log.warning("no text from transcription")
+                self._notify("Recording", "No speech detected")
+            self.title = ICON_MIC
+        threading.Thread(target=work, daemon=True).start()
+
+    def _improve(self, text):
+        result = subprocess.run(
+            ["improve-writing"],
+            input=text,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        return result.stdout.strip() or text
+
+    def stop_copy(self, _):
+        self._stop_and_finish()
 
     def stop_improve(self, _):
-        self.title = ICON_WAIT
-        log.info("stop_improve called")
-        text = self._stop_and_get_text()
-        if text:
-            result = subprocess.run(
-                ["improve-writing"],
-                input=text,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            improved = result.stdout.strip() or text
-            subprocess.run(["pbcopy"], input=improved, text=True)
-            preview = improved[:80] + ("…" if len(improved) > 80 else "")
-            self._notify("Improved & copied to clipboard", preview)
-        self.title = ICON_MIC
+        self._stop_and_finish(postprocess=self._improve)
 
 
 if __name__ == "__main__":
