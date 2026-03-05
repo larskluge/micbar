@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-mic-bar is a macOS menu bar app (using `rumps`) that records audio via an external `mictotext` CLI tool, then optionally pipes the transcription through an `improve-writing` CLI tool before copying to clipboard.
+mic_bar is a macOS menu bar app (using `rumps`) that records audio via an external `mictotext` CLI tool, then optionally pipes the transcription through an `improve-writing` CLI tool before copying to clipboard.
 
 ## Running
 
@@ -13,7 +13,7 @@ mic-bar is a macOS menu bar app (using `rumps`) that records audio via an extern
 source venv/bin/activate
 
 # Run the app
-python mic-bar.py
+python mic_bar.py
 ```
 
 ## Dependencies
@@ -23,4 +23,4 @@ python mic-bar.py
 
 ## Architecture
 
-Single-file app (`mic-bar.py`). `MicBar` subclasses `rumps.App` and manages a `mictotext` subprocess. Recording starts a subprocess in its own process group; stopping sends SIGINT to that group and reads stdout. Menu items toggle between enabled/disabled states based on recording status.
+Single-file app (`mic_bar.py`). `MicBar` subclasses `rumps.App` and manages a `mictotext` subprocess. Recording starts a subprocess in its own process group; stopping sends SIGINT to that group and reads stdout. Menu items toggle between enabled/disabled states based on recording status.
