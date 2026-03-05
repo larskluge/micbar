@@ -38,7 +38,7 @@ The included launchd plist runs micbar automatically when you log in.
 make install
 ```
 
-This copies `com.aekym.micbar.plist` to `~/Library/LaunchAgents/` and loads it. The service starts on GUI login sessions (`Aqua`) and does not restart on exit.
+This generates a plist from the template with your local paths, copies it to `~/Library/LaunchAgents/`, and loads it. The service starts on GUI login sessions (`Aqua`) and does not restart on exit.
 
 To stop and remove the service:
 
@@ -51,5 +51,3 @@ To restart the service:
 ```bash
 make restart
 ```
-
-> **Note:** The plist contains hardcoded paths to the project directory. If you move the project, update the paths in `com.aekym.micbar.plist`.

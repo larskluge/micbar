@@ -1,7 +1,11 @@
 PLIST := com.aekym.micbar.plist
 AGENTS_DIR := $(HOME)/Library/LaunchAgents
+PROJECT_DIR := $(shell pwd)
 
-install:
+$(PLIST):
+	@sed 's|__PROJECT_DIR__|$(PROJECT_DIR)|g; s|__HOME__|$(HOME)|g' $(PLIST).template > $(PLIST)
+
+install: $(PLIST)
 	cp $(PLIST) $(AGENTS_DIR)/$(PLIST)
 	launchctl load $(AGENTS_DIR)/$(PLIST)
 
@@ -15,3 +19,5 @@ restart:
 
 run:
 	./venv/bin/python3 micbar.py
+
+.PHONY: install uninstall restart run
