@@ -12,6 +12,10 @@ import logging
 import ctypes
 import ctypes.util
 
+ICON_MIC = "\U0001F3A4"
+ICON_REC = "\U0001F534"
+ICON_WAIT = "\u23F3"
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -39,7 +43,7 @@ log.info("ENV keys: %s", sorted(os.environ.keys()))
 
 class MicBar(rumps.App):
     def __init__(self):
-        super().__init__("\U0001F3A4", quit_button=None)
+        super().__init__(ICON_MIC, quit_button=None)
         self.proc = None
         log.info("MicBar initialized")
         self.menu = [
@@ -54,12 +58,11 @@ class MicBar(rumps.App):
 
     def _set_recording(self, on):
         if on:
-            self.title = "\U0001F534"
+            self.title = ICON_REC
             self.menu["Start Recording"].set_callback(None)
             self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
             self.menu["Stop -> Improve -> Clipboard"].set_callback(self.stop_improve)
         else:
-            self.title = "\U0001F3A4"
             self.menu["Start Recording"].set_callback(self.start)
             self.menu["Stop -> Clipboard"].set_callback(None)
             self.menu["Stop -> Improve -> Clipboard"].set_callback(None)
@@ -75,7 +78,7 @@ class MicBar(rumps.App):
         log.info("start: mictotext PID=%d", self.proc.pid)
         # Log child process tree after a short delay
         threading.Thread(target=self._log_proc_tree, args=(self.proc.pid,), daemon=True).start()
-        self.title = "\u23F3"
+        self.title = ICON_WAIT
         self.menu["Start Recording"].set_callback(None)
         self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
         self.menu["Stop -> Improve -> Clipboard"].set_callback(self.stop_improve)
@@ -115,7 +118,7 @@ class MicBar(rumps.App):
                 log.debug("stderr: %s", line.rstrip())
                 if b"Recording now" in line:
                     log.info("mictotext ready, recording")
-                    self.title = "\U0001F534"
+                    self.title = ICON_REC
                     break
             # Drain remaining stderr
             for line in proc.stderr:
@@ -150,6 +153,7 @@ class MicBar(rumps.App):
         return text
 
     def stop_copy(self, _):
+        self.title = ICON_WAIT
         log.info("stop_copy called")
         text = self._stop_and_get_text()
         if text:
@@ -160,8 +164,10 @@ class MicBar(rumps.App):
         else:
             log.warning("no text from transcription")
             self._notify("Recording", "No speech detected")
+        self.title = ICON_MIC
 
     def stop_improve(self, _):
+        self.title = ICON_WAIT
         log.info("stop_improve called")
         text = self._stop_and_get_text()
         if text:
@@ -176,6 +182,7 @@ class MicBar(rumps.App):
             subprocess.run(["pbcopy"], input=improved, text=True)
             preview = improved[:80] + ("…" if len(improved) > 80 else "")
             self._notify("Improved & copied to clipboard", preview)
+        self.title = ICON_MIC
 
 
 if __name__ == "__main__":
