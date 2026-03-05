@@ -19,6 +19,8 @@ make run
 
 ## Architecture
 
-Single-file app (`micbar.py`). `MicBar` subclasses `rumps.App` and manages a `mictotext` subprocess. Recording starts a subprocess in its own process group; stopping sends SIGINT to that group and reads stdout. Menu items toggle between enabled/disabled states based on recording status.
+Single-file app (`micbar.py`). `MicBar` subclasses `rumps.App` and manages a `mictotext` subprocess. Recording starts a subprocess in its own process group; stopping sends SIGINT to that group and reads stdout. A background thread reads stderr to detect when mictotext is ready (switches icon from ⏳ to 🔴). Menu items toggle between enabled/disabled states based on recording status. Notifications use `osascript` instead of `rumps.notification()` for reliability with accessory apps.
 
-The launchd plist is generated from `com.aekym.micbar.plist.template` at install time via `make install`, substituting `__PROJECT_DIR__` and `__HOME__` with local paths.
+The launchd plist is generated from `com.aekym.micbar.plist.template` at install time via `make install`, substituting `__PROJECT_DIR__` and `__HOME__` with local paths. The plist uses `ProcessType Interactive` to ensure full CPU priority (critical for ffmpeg audio capture on Apple Silicon).
+
+Debug logs are written to `~/Library/Logs/micbar.log`.

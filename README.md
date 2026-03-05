@@ -26,7 +26,7 @@ make run
 
 A microphone icon appears in the menu bar. The menu has three actions:
 
-- **Start Recording** — starts `mictotext` in the background, icon turns red
+- **Start Recording** — starts `mictotext` in the background, icon shows ⏳ while initializing then 🔴 when recording
 - **Stop -> Clipboard** — stops recording, copies transcription to clipboard
 - **Stop -> Improve -> Clipboard** — stops recording, pipes text through `improve-writing`, copies result to clipboard
 
@@ -46,8 +46,8 @@ To stop and remove the service:
 make uninstall
 ```
 
-To restart the service:
+To reinstall (regenerates plist from template and reloads):
 
 ```bash
-make restart
+make reinstall
 ```
