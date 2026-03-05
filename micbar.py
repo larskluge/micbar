@@ -8,13 +8,15 @@ import subprocess
 import signal
 import os
 import threading
+import time
 import logging
 import ctypes
 import ctypes.util
 
-ICON_MIC = "\U0001F3A4"
-ICON_REC = "\U0001F534"
-ICON_WAIT = "\u23F3"
+ICON_DIR = os.path.dirname(os.path.abspath(__file__))
+ICON_MIC = os.path.join(ICON_DIR, "icon_mic.png")
+ICON_REC = os.path.join(ICON_DIR, "icon_rec.png")
+ICON_WAIT = os.path.join(ICON_DIR, "icon_wait.png")
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -43,9 +45,12 @@ log.info("ENV keys: %s", sorted(os.environ.keys()))
 
 class MicBar(rumps.App):
     def __init__(self):
-        super().__init__(ICON_MIC, quit_button=None)
+        super().__init__("MicBar", icon=ICON_MIC, template=True, quit_button=None)
         self.proc = None
+        self._record_start_time = None
+        self._logged_proc_tree = False
         log.info("MicBar initialized")
+
         self.menu = [
             rumps.MenuItem("Start Recording", callback=self.start),
             rumps.MenuItem("Stop -> Clipboard", callback=self.stop_copy),
@@ -58,7 +63,7 @@ class MicBar(rumps.App):
 
     def _set_recording(self, on):
         if on:
-            self.title = ICON_REC
+            self._set_icon(ICON_REC)
             self.menu["Start Recording"].set_callback(None)
             self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
             self.menu["Stop -> Improve -> Clipboard"].set_callback(self.stop_improve)
@@ -67,8 +72,13 @@ class MicBar(rumps.App):
             self.menu["Stop -> Clipboard"].set_callback(None)
             self.menu["Stop -> Improve -> Clipboard"].set_callback(None)
 
+    def _set_icon(self, icon_path):
+        self._template = (icon_path != ICON_REC)
+        self.icon = icon_path
+
     def start(self, _):
         log.info("start: launching mictotext")
+        self._record_start_time = time.time()
         self.proc = subprocess.Popen(
             ["mictotext"],
             stdout=subprocess.PIPE,
@@ -76,16 +86,15 @@ class MicBar(rumps.App):
             preexec_fn=os.setsid,
         )
         log.info("start: mictotext PID=%d", self.proc.pid)
-        # Log child process tree after a short delay
-        threading.Thread(target=self._log_proc_tree, args=(self.proc.pid,), daemon=True).start()
-        self.title = ICON_WAIT
+        if not self._logged_proc_tree:
+            threading.Thread(target=self._log_proc_tree, args=(self.proc.pid,), daemon=True).start()
+        self._set_icon(ICON_WAIT)
         self.menu["Start Recording"].set_callback(None)
         self.menu["Stop -> Clipboard"].set_callback(self.stop_copy)
         self.menu["Stop -> Improve -> Clipboard"].set_callback(self.stop_improve)
         threading.Thread(target=self._wait_for_ready, daemon=True).start()
 
     def _log_proc_tree(self, pid):
-        import time
         time.sleep(2)
         try:
             result = subprocess.run(
@@ -108,6 +117,7 @@ class MicBar(rumps.App):
                 capture_output=True, text=True
             )
             log.info("process tree:\n%s", result3.stdout)
+            self._logged_proc_tree = True
         except Exception as e:
             log.exception("_log_proc_tree error: %s", e)
 
@@ -118,7 +128,7 @@ class MicBar(rumps.App):
                 log.debug("stderr: %s", line.rstrip())
                 if b"Recording now" in line:
                     log.info("mictotext ready, recording")
-                    self.title = ICON_REC
+                    self._set_icon(ICON_REC)
                     break
             # Drain remaining stderr
             for line in proc.stderr:
@@ -139,7 +149,8 @@ class MicBar(rumps.App):
             log.warning("_stop_and_get_text: no proc")
             return None
         pid = self.proc.pid
-        log.info("stopping mictotext PID=%d", pid)
+        recording_duration = time.time() - self._record_start_time if self._record_start_time else None
+        log.info("stopping mictotext PID=%d (recorded %.1fs by wall clock)", pid, recording_duration or 0)
         os.killpg(os.getpgid(pid), signal.SIGINT)
         log.debug("SIGINT sent, reading stdout...")
         stdout = self.proc.stdout.read()
@@ -147,12 +158,14 @@ class MicBar(rumps.App):
         rc = self.proc.wait(timeout=30)
         log.info("mictotext exited rc=%d", rc)
         self.proc = None
+        self._record_start_time = None
         text = stdout.decode().strip()
-        log.info("transcription (%d chars): %s", len(text), text[:200])
+        chars_per_sec = len(text) / recording_duration if recording_duration and recording_duration > 0 else 0
+        log.info("transcription (%d chars, %.1f chars/sec): %s", len(text), chars_per_sec, text[:500])
         return text
 
     def _stop_and_finish(self, postprocess=None):
-        self.title = ICON_WAIT
+        self._set_icon(ICON_WAIT)
         self._set_recording(False)
         def work():
             log.info("stop called (improve=%s)", postprocess is not None)
@@ -168,10 +181,12 @@ class MicBar(rumps.App):
             else:
                 log.warning("no text from transcription")
                 self._notify("Recording", "No speech detected")
-            self.title = ICON_MIC
+            self._set_icon(ICON_MIC)
         threading.Thread(target=work, daemon=True).start()
 
     def _improve(self, text):
+        log.info("improve-writing input (%d chars): %s", len(text), text[:500])
+        t0 = time.time()
         result = subprocess.run(
             ["improve-writing"],
             input=text,
@@ -179,7 +194,16 @@ class MicBar(rumps.App):
             text=True,
             timeout=60,
         )
-        return result.stdout.strip() or text
+        elapsed = time.time() - t0
+        improved = result.stdout.strip()
+        log.info("improve-writing rc=%d, took %.1fs", result.returncode, elapsed)
+        if result.stderr:
+            log.debug("improve-writing stderr: %s", result.stderr.strip()[:500])
+        if improved:
+            log.info("improve-writing output (%d chars): %s", len(improved), improved[:500])
+        else:
+            log.warning("improve-writing returned empty, using raw transcription")
+        return improved or text
 
     def stop_copy(self, _):
         self._stop_and_finish()
