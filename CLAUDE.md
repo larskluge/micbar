@@ -4,23 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-micbar is a macOS menu bar app (using `rumps`) that records audio via an external `mictotext` CLI tool, then optionally pipes the transcription through an `improve-writing` CLI tool before copying to clipboard.
+micbar is a native macOS menu bar app (Swift, AppKit) that records audio via an external `mictotext` CLI tool, then optionally pipes the transcription through an `improve-writing` CLI tool before copying to clipboard.
 
-## Running
+## Building & Running
 
 ```bash
-make run
+make build   # Build release .app bundle
+make run     # Build and open the app
+make clean   # Remove build artifacts
 ```
+
+Requires Swift toolchain (Xcode Command Line Tools). No Xcode IDE needed.
 
 ## Dependencies
 
-- `rumps` - macOS menu bar framework
-- External CLIs expected on PATH: `mictotext` (speech-to-text), `improve-writing` (text post-processing), `pbcopy` (macOS clipboard)
+- Swift Package Manager (no external packages)
+- External CLIs expected on PATH: `mictotext` (speech-to-text), `improve-writing` (text post-processing)
 
 ## Architecture
 
-Single-file app (`micbar.py`). `MicBar` subclasses `rumps.App` and manages a `mictotext` subprocess. Recording starts a subprocess in its own process group; stopping sends SIGINT to that group and reads stdout. A background thread reads stderr to detect when mictotext is ready (switches icon from ⏳ to 🔴). Menu items toggle between enabled/disabled states based on recording status. Notifications use `osascript` instead of `rumps.notification()` for reliability with accessory apps.
+Swift Package (Package.swift) producing an AppKit executable, wrapped into a .app bundle by the Makefile.
 
-The launchd plist is generated from `com.aekym.micbar.plist.template` at install time via `make install`, substituting `__PROJECT_DIR__` and `__HOME__` with local paths. The plist uses `ProcessType Interactive` to ensure full CPU priority (critical for ffmpeg audio capture on Apple Silicon).
+### Source files (MicBar/)
+
+- `main.swift` — Entry point. Sets up NSApplication with accessory activation policy.
+- `AppDelegate.swift` — NSStatusBar menu bar UI, state machine (idle/waiting/recording/processing), menu item management, notifications via UNUserNotificationCenter, improve-writing subprocess, Launch at Login via SMAppService.
+- `MicToTextProcess.swift` — Manages the `mictotext` subprocess using `posix_spawnp` with `POSIX_SPAWN_SETPGROUP` (own process group). Monitors stderr on a background DispatchQueue for "Recording now" readiness signal. Stops via `kill(-pid, SIGINT)`.
+- `Logger.swift` — Singleton file logger writing to `~/Library/Logs/micbar.log` with serial DispatchQueue for thread safety.
+
+### Key details
+
+- `LSUIElement=true` in Info.plist — no dock icon
+- Icons are 36x36 PNGs (Retina @2x for 18pt menu bar) in MicBar/Resources/
+- Login item managed by SMAppService (macOS 13+), no launchd plist needed
+- ProcessInfo.beginActivity with full QoS options ensures CPU priority for audio capture
 
 Debug logs are written to `~/Library/Logs/micbar.log`.

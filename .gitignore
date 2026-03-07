@@ -1,3 +1,9 @@
+build/
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+DerivedData/
+*.xcuserstate
 venv/
 __pycache__/
 com.aekym.micbar.plist
