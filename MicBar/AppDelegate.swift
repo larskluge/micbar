@@ -44,6 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setIcon("icon_mic", template: true)
 
         let menu = NSMenu()
+        menu.autoenablesItems = false
 
         startItem = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "")
         startItem.target = self
