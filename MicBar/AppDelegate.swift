@@ -2,7 +2,13 @@ import AppKit
 import UserNotifications
 import ServiceManagement
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+private let improveActionID = "IMPROVE_ACTION"
+private let copyActionID = "COPY_ACTION"
+private let improveCategoryID = "TRANSCRIPTION_WITH_IMPROVE"
+private let copyCategoryID = "TRANSCRIPTION_COPY_ONLY"
+private let userInfoTextKey = "transcribedText"
+
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private var statusItem: NSStatusItem!
     private var startItem: NSMenuItem!
     private var stopCopyItem: NSMenuItem!
@@ -31,9 +37,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             reason: "Audio recording"
         )
 
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             self.log.info("notification auth: granted=\(granted) error=\(String(describing: error))")
         }
+
+        let copyAction = UNNotificationAction(identifier: copyActionID, title: "Copy", options: [])
+        let improveAction = UNNotificationAction(identifier: improveActionID, title: "Improve", options: [])
+        let improveCategory = UNNotificationCategory(identifier: improveCategoryID, actions: [copyAction, improveAction], intentIdentifiers: [])
+        let copyCategory = UNNotificationCategory(identifier: copyCategoryID, actions: [copyAction], intentIdentifiers: [])
+        center.setNotificationCategories([improveCategory, copyCategory])
 
         setupStatusItem()
         log.info("MicBar initialized")
@@ -163,7 +177,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let label = improve ? "Improved & copied to clipboard" : "Copied to clipboard"
 
             DispatchQueue.main.async {
-                self.notify(title: label, body: preview)
+                self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve)
                 self.log.info("copied to clipboard, notified")
                 self.state = .idle
             }
@@ -221,12 +235,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func notify(title: String, body: String) {
+    private func notify(title: String, body: String, transcribedText: String? = nil, includeImprove: Bool = false) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+        if let text = transcribedText {
+            content.userInfo = [userInfoTextKey: text]
+            content.categoryIdentifier = includeImprove ? improveCategoryID : copyCategoryID
+        }
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        guard let text = response.notification.request.content.userInfo[userInfoTextKey] as? String else {
+            completionHandler()
+            return
+        }
+
+        switch response.actionIdentifier {
+        case copyActionID:
+            log.info("copy from notification (\(text.count) chars)")
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            completionHandler()
+
+        case improveActionID:
+            log.info("improve from notification (\(text.count) chars)")
+
+            // Re-post the original notification since macOS dismisses it on action tap
+            let original = response.notification.request.content
+            notify(title: original.title, body: original.body, transcribedText: text)
+
+            state = .processing
+
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { completionHandler(); return }
+                let improved = self.improveWriting(text)
+
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(improved, forType: .string)
+
+                let preview = improved.count > 80 ? String(improved.prefix(80)) + "..." : improved
+
+                DispatchQueue.main.async {
+                    self.notify(title: "Improved & copied to clipboard", body: preview, transcribedText: improved)
+                    self.log.info("improved from notification, copied to clipboard")
+                    self.state = .idle
+                    completionHandler()
+                }
+            }
+
+        default:
+            completionHandler()
+        }
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 
     @objc private func toggleLogin() {
