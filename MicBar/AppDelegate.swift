@@ -60,18 +60,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        startItem = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "")
+        startItem = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "r")
         startItem.target = self
         menu.addItem(startItem)
 
-        stopCopyItem = NSMenuItem(title: "Stop -> Clipboard", action: #selector(stopCopy), keyEquivalent: "")
+        stopCopyItem = NSMenuItem(title: "Stop & Copy", action: #selector(stopCopy), keyEquivalent: "c")
         stopCopyItem.target = self
-        stopCopyItem.isEnabled = false
+        stopCopyItem.isHidden = true
         menu.addItem(stopCopyItem)
 
-        stopImproveItem = NSMenuItem(title: "Stop -> Improve -> Clipboard", action: #selector(stopImprove), keyEquivalent: "")
+        stopImproveItem = NSMenuItem(title: "Stop, Improve & Copy", action: #selector(stopImprove), keyEquivalent: "i")
         stopImproveItem.target = self
-        stopImproveItem.isEnabled = false
+        stopImproveItem.isHidden = true
         menu.addItem(stopImproveItem)
 
         menu.addItem(.separator())
@@ -81,7 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(loginItem)
 
-        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "")
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -101,24 +101,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         switch state {
         case .idle:
             setIcon("icon_mic", template: true)
-            startItem.isEnabled = true
-            stopCopyItem.isEnabled = false
-            stopImproveItem.isEnabled = false
+            startItem.isHidden = false
+            stopCopyItem.isHidden = true
+            stopImproveItem.isHidden = true
         case .waiting:
             setIcon("icon_wait", template: true)
-            startItem.isEnabled = false
-            stopCopyItem.isEnabled = true
-            stopImproveItem.isEnabled = true
+            startItem.isHidden = true
+            stopCopyItem.isHidden = false
+            stopImproveItem.isHidden = false
         case .recording:
             setIcon("icon_rec", template: false)
-            startItem.isEnabled = false
-            stopCopyItem.isEnabled = true
-            stopImproveItem.isEnabled = true
+            startItem.isHidden = true
+            stopCopyItem.isHidden = false
+            stopImproveItem.isHidden = false
         case .processing:
             setIcon("icon_wait", template: true)
-            startItem.isEnabled = false
-            stopCopyItem.isEnabled = false
-            stopImproveItem.isEnabled = false
+            startItem.isHidden = true
+            stopCopyItem.isHidden = true
+            stopImproveItem.isHidden = true
         }
     }
 
