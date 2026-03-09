@@ -192,6 +192,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         proc.arguments = ["improve-writing"]
 
+        var environment = ProcessInfo.processInfo.environment
+        if let path = environment["PATH"], !path.contains("/opt/homebrew/bin") {
+            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(path)"
+        }
+        proc.environment = environment
+
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

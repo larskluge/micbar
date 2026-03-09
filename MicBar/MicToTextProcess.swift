@@ -34,6 +34,16 @@ final class MicToTextProcess {
         posix_spawnattr_setflags(&spawnAttrs, Int16(POSIX_SPAWN_SETPGROUP))
         posix_spawnattr_setpgroup(&spawnAttrs, 0)
 
+        guard let resolvedPath = MicToTextProcess.resolveExecutable("mictotext") else {
+            log.warning("mictotext not found on PATH")
+            posix_spawn_file_actions_destroy(&fileActions)
+            posix_spawnattr_destroy(&spawnAttrs)
+            close(stdoutPipe[0]); close(stdoutPipe[1])
+            close(stderrPipe[0]); close(stderrPipe[1])
+            return false
+        }
+        log.info("resolved mictotext: \(resolvedPath)")
+
         let argv: [UnsafeMutablePointer<CChar>?] = [
             strdup("mictotext"),
             nil
@@ -43,7 +53,7 @@ final class MicToTextProcess {
         let env = buildEnvironment()
         defer { env.forEach { free($0) } }
 
-        let result = posix_spawnp(&pid, "mictotext", &fileActions, &spawnAttrs, argv, env)
+        let result = posix_spawnp(&pid, resolvedPath, &fileActions, &spawnAttrs, argv, env)
 
         posix_spawn_file_actions_destroy(&fileActions)
         posix_spawnattr_destroy(&spawnAttrs)
@@ -166,11 +176,41 @@ final class MicToTextProcess {
         }
     }
 
+    static let searchPaths = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+
+    static func resolveExecutable(_ name: String) -> String? {
+        let fm = FileManager.default
+        // Check current PATH first, then common locations
+        let pathDirs = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":").map(String.init)
+        let allDirs = pathDirs + searchPaths.filter { !pathDirs.contains($0) }
+        for dir in allDirs {
+            let full = "\(dir)/\(name)"
+            if fm.isExecutableFile(atPath: full) {
+                return full
+            }
+        }
+        return nil
+    }
+
     private func buildEnvironment() -> [UnsafeMutablePointer<CChar>?] {
         var env: [UnsafeMutablePointer<CChar>?] = []
         let currentEnv = ProcessInfo.processInfo.environment
         for (key, value) in currentEnv {
-            env.append(strdup("\(key)=\(value)"))
+            if key == "PATH" {
+                let extraPaths = "/opt/homebrew/bin:/usr/local/bin"
+                let newPath = value.contains("/opt/homebrew/bin") ? value : "\(extraPaths):\(value)"
+                env.append(strdup("PATH=\(newPath)"))
+            } else {
+                env.append(strdup("\(key)=\(value)"))
+            }
         }
         env.append(nil)
         return env
