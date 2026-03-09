@@ -8,12 +8,11 @@ private let improveCategoryID = "TRANSCRIPTION_WITH_IMPROVE"
 private let copyCategoryID = "TRANSCRIPTION_COPY_ONLY"
 private let userInfoTextKey = "transcribedText"
 
-class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, RecordingPopoverDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
-    private var startItem: NSMenuItem!
-    private var stopCopyItem: NSMenuItem!
-    private var stopImproveItem: NSMenuItem!
-    private var loginItem: NSMenuItem!
+    private let popover = NSPopover()
+    private var popoverController: RecordingPopoverController!
+    private var eventMonitor: Any?
 
     private let process = MicToTextProcess()
     private let log = Logger.shared
@@ -57,35 +56,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         setIcon("icon_mic", template: true)
 
-        let menu = NSMenu()
-        menu.autoenablesItems = false
+        popoverController = RecordingPopoverController()
+        popoverController.delegate = self
 
-        startItem = NSMenuItem(title: "Start Recording", action: #selector(startRecording), keyEquivalent: "r")
-        startItem.target = self
-        menu.addItem(startItem)
+        popover.contentViewController = popoverController
+        popover.behavior = .transient
+        popover.animates = true
+        popover.delegate = self
 
-        stopCopyItem = NSMenuItem(title: "Stop & Copy", action: #selector(stopCopy), keyEquivalent: "c")
-        stopCopyItem.target = self
-        stopCopyItem.isHidden = true
-        menu.addItem(stopCopyItem)
+        if let button = statusItem.button {
+            button.action = #selector(togglePopover)
+            button.target = self
+        }
+    }
 
-        stopImproveItem = NSMenuItem(title: "Stop, Improve & Copy", action: #selector(stopImprove), keyEquivalent: "i")
-        stopImproveItem.target = self
-        stopImproveItem.isHidden = true
-        menu.addItem(stopImproveItem)
+    @objc private func togglePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            guard let button = statusItem.button else { return }
+            popoverController.updateState(mapState(state))
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
 
-        menu.addItem(.separator())
-
-        loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
-        loginItem.target = self
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(loginItem)
-
-        let quitItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-
-        statusItem.menu = menu
+    private func mapState(_ s: State) -> RecordingPopoverController.AppDelegateState {
+        switch s {
+        case .idle: return .idle
+        case .waiting: return .waiting
+        case .recording: return .recording
+        case .processing: return .processing
+        }
     }
 
     private func setIcon(_ name: String, template: Bool) {
@@ -101,30 +102,52 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         switch state {
         case .idle:
             setIcon("icon_mic", template: true)
-            startItem.isHidden = false
-            stopCopyItem.isHidden = true
-            stopImproveItem.isHidden = true
         case .waiting:
             setIcon("icon_wait", template: true)
-            startItem.isHidden = true
-            stopCopyItem.isHidden = false
-            stopImproveItem.isHidden = false
         case .recording:
             setIcon("icon_rec", template: false)
-            startItem.isHidden = true
-            stopCopyItem.isHidden = false
-            stopImproveItem.isHidden = false
         case .processing:
             setIcon("icon_wait", template: true)
-            startItem.isHidden = true
-            stopCopyItem.isHidden = true
-            stopImproveItem.isHidden = true
         }
+        popoverController?.updateState(mapState(state))
     }
 
-    @objc private func startRecording() {
+    // MARK: - RecordingPopoverDelegate
+
+    var isLoginEnabled: Bool {
+        SMAppService.mainApp.status == .enabled
+    }
+
+    func popoverDidRequestStart() {
+        startRecording()
+    }
+
+    func popoverDidRequestStopCopy() {
+        stopAndFinish(improve: false)
+    }
+
+    func popoverDidRequestStopImprove() {
+        stopAndFinish(improve: true)
+    }
+
+    func popoverDidRequestCancel() {
+        cancelRecording()
+    }
+
+    func popoverDidRequestToggleLogin() {
+        toggleLogin()
+    }
+
+    func popoverDidRequestQuit() {
+        quit()
+    }
+
+    // MARK: - Recording
+
+    private func startRecording() {
         log.info("start: launching mictotext")
         recordStartTime = Date()
+        popoverController.setRecordingStartTime(recordStartTime!)
 
         process.onReady = { [weak self] in
             self?.state = .recording
@@ -138,12 +161,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    @objc private func stopCopy() {
-        stopAndFinish(improve: false)
-    }
-
-    @objc private func stopImprove() {
-        stopAndFinish(improve: true)
+    private func cancelRecording() {
+        log.info("cancel: discarding recording")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            _ = self.process.stop()
+            DispatchQueue.main.async {
+                self.popover.performClose(nil)
+                self.state = .idle
+                self.log.info("recording discarded")
+            }
+        }
+        state = .processing // show spinner while stopping
     }
 
     private func stopAndFinish(improve: Bool) {
@@ -177,6 +206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let label = improve ? "Improved & copied to clipboard" : "Copied to clipboard"
 
             DispatchQueue.main.async {
+                self.popover.performClose(nil)
                 self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve)
                 self.log.info("copied to clipboard, notified")
                 self.state = .idle
@@ -269,7 +299,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         case improveActionID:
             log.info("improve from notification (\(text.count) chars)")
 
-            // Re-post the original notification since macOS dismisses it on action tap
             let original = response.notification.request.content
             notify(title: original.title, body: original.body, transcribedText: text)
 
@@ -301,15 +330,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         completionHandler([.banner, .sound])
     }
 
-    @objc private func toggleLogin() {
+    // MARK: - NSPopoverDelegate
+
+    func popoverShouldClose(_ popover: NSPopover) -> Bool {
+        // Don't allow click-outside dismissal while recording or waiting
+        return state == .idle || state == .processing
+    }
+
+    private func toggleLogin() {
         do {
             if SMAppService.mainApp.status == .enabled {
                 try SMAppService.mainApp.unregister()
-                loginItem.state = .off
                 log.info("login item disabled")
             } else {
                 try SMAppService.mainApp.register()
-                loginItem.state = .on
                 log.info("login item enabled")
             }
         } catch {
@@ -317,7 +351,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    @objc private func quit() {
+    private func quit() {
         if process.isRunning {
             _ = process.stop()
         }
