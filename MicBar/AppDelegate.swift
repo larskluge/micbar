@@ -169,16 +169,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func cancelRecording() {
         log.info("cancel: discarding recording")
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            _ = self.process.stop()
-            DispatchQueue.main.async {
-                self.popover.performClose(nil)
-                self.state = .idle
-                self.log.info("recording discarded")
-            }
-        }
-        state = .processing // show spinner while stopping
+        process.forceKill()
+        popover.performClose(nil)
+        state = .idle
     }
 
     private func stopAndFinish(improve: Bool) {

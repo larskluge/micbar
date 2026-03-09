@@ -104,6 +104,20 @@ final class MicToTextProcess {
         return text
     }
 
+    func forceKill() {
+        guard pid > 0 else { return }
+        log.info("killing mictotext PID=\(pid)")
+        Darwin.kill(-pid, SIGKILL)
+        close(stdoutReadFD)
+        stdoutReadFD = -1
+        close(stderrReadFD)
+        stderrReadFD = -1
+        var status: Int32 = 0
+        waitpid(pid, &status, 0)
+        log.info("mictotext killed")
+        pid = 0
+    }
+
     var isRunning: Bool { pid > 0 }
 
     private func readAll(fd: Int32) -> Data {
