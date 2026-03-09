@@ -98,10 +98,12 @@ class RecordingPopoverController: NSViewController {
 
     private func buildIdleView() {
         let pad: CGFloat = 16
-        let btnH: CGFloat = 44
-        let footerH: CGFloat = 28
-        let sepGap: CGFloat = 14
-        let totalH: CGFloat = pad + footerH + sepGap + 1 + sepGap + btnH + pad
+        let footerH: CGFloat = 24
+        let circleSize: CGFloat = 72
+        let labelH: CGFloat = 16
+        let labelGap: CGFloat = 10
+        let sepGap: CGFloat = 12
+        let totalH: CGFloat = pad + footerH + sepGap + 1 + sepGap + labelH + labelGap + circleSize + pad
 
         idleView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         idleView.wantsLayer = true
@@ -110,18 +112,22 @@ class RecordingPopoverController: NSViewController {
 
         // Footer row: Login checkbox left, Quit right
         loginCheckbox = NSButton(checkboxWithTitle: "Launch at Login", target: self, action: #selector(loginClicked))
-        loginCheckbox.frame = NSRect(x: pad, y: y, width: 150, height: footerH)
-        loginCheckbox.controlSize = .regular
+        loginCheckbox.frame = NSRect(x: pad, y: y, width: 160, height: footerH)
+        loginCheckbox.controlSize = .small
         loginCheckbox.font = .systemFont(ofSize: 12)
+        loginCheckbox.contentTintColor = .secondaryLabelColor
 
-        let quitButton = NSButton(frame: NSRect(x: W - pad - 44, y: y, width: 44, height: footerH))
-        quitButton.title = "Quit"
-        quitButton.bezelStyle = .recessed
+        let quitLabel = NSTextField(labelWithString: "Quit")
+        quitLabel.frame = NSRect(x: W - pad - 36, y: y - 1, width: 36, height: footerH)
+        quitLabel.font = .systemFont(ofSize: 12)
+        quitLabel.textColor = .secondaryLabelColor
+        quitLabel.alignment = .right
+
+        let quitButton = NSButton(frame: NSRect(x: W - pad - 36, y: y - 1, width: 36, height: footerH))
+        quitButton.title = ""
+        quitButton.isTransparent = true
         quitButton.target = self
         quitButton.action = #selector(quitClicked)
-        quitButton.controlSize = .small
-        quitButton.font = .systemFont(ofSize: 12)
-        quitButton.contentTintColor = .secondaryLabelColor
 
         y += footerH + sepGap
 
@@ -129,34 +135,73 @@ class RecordingPopoverController: NSViewController {
         separator.boxType = .separator
         y += 1 + sepGap
 
-        // Start Recording button — red accent
-        let startButton = NSButton(frame: NSRect(x: pad, y: y, width: W - pad * 2, height: btnH))
-        startButton.bezelStyle = .rounded
-        startButton.controlSize = .large
-        startButton.target = self
-        startButton.action = #selector(startClicked)
-        startButton.keyEquivalent = "\r"
-        startButton.contentTintColor = .white
-        startButton.bezelColor = NSColor.systemRed
+        // Subtle hint below button
+        let startLabel = NSTextField(labelWithString: "Record")
+        startLabel.frame = NSRect(x: 0, y: y, width: W, height: labelH)
+        startLabel.font = .systemFont(ofSize: 10)
+        startLabel.textColor = .tertiaryLabelColor
+        startLabel.alignment = .center
+        y += labelH + labelGap
 
-        if let micImg = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil) {
-            let attachment = NSTextAttachment()
-            attachment.image = micImg
-            let attrStr = NSMutableAttributedString(attachment: attachment)
-            attrStr.append(NSAttributedString(string: " Start Recording"))
-            attrStr.addAttributes([
-                .font: NSFont.systemFont(ofSize: 14, weight: .semibold),
-                .foregroundColor: NSColor.white
-            ], range: NSRange(location: 0, length: attrStr.length))
-            startButton.attributedTitle = attrStr
-        } else {
-            startButton.title = "Start Recording"
-            startButton.font = .systemFont(ofSize: 14, weight: .semibold)
+        // Big circular red record button
+        let circleX = (W - circleSize) / 2
+        let circleButton = NSButton(frame: NSRect(x: circleX, y: y, width: circleSize, height: circleSize))
+        circleButton.bezelStyle = .circular
+        circleButton.isBordered = false
+        circleButton.wantsLayer = true
+        circleButton.layer?.cornerRadius = circleSize / 2
+        circleButton.layer?.backgroundColor = NSColor(red: 0.88, green: 0.14, blue: 0.14, alpha: 1.0).cgColor
+
+        // Radial gradient overlay for 3D depth
+        let gradient = CAGradientLayer()
+        gradient.type = .radial
+        gradient.frame = CGRect(x: 0, y: 0, width: circleSize, height: circleSize)
+        gradient.cornerRadius = circleSize / 2
+        gradient.colors = [
+            NSColor.white.withAlphaComponent(0.25).cgColor,
+            NSColor.white.withAlphaComponent(0.0).cgColor,
+            NSColor.black.withAlphaComponent(0.15).cgColor
+        ]
+        gradient.locations = [0.0, 0.45, 1.0]
+        gradient.startPoint = CGPoint(x: 0.45, y: 0.65)
+        gradient.endPoint = CGPoint(x: 1.0, y: 1.0)
+        circleButton.layer?.addSublayer(gradient)
+        circleButton.target = self
+        circleButton.action = #selector(startClicked)
+        circleButton.keyEquivalent = "\r"
+
+        // Space bar also triggers start
+        let spaceButton = NSButton(frame: .zero)
+        spaceButton.isTransparent = true
+        spaceButton.target = self
+        spaceButton.action = #selector(startClicked)
+        spaceButton.keyEquivalent = " "
+        idleView.addSubview(spaceButton)
+
+        // Mic icon centered in the circle
+        if let micImg = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 26, weight: .medium)) {
+            circleButton.image = micImg
+            circleButton.imagePosition = .imageOnly
+            circleButton.contentTintColor = .white
         }
 
-        idleView.addSubview(startButton)
+        // Glow behind the button
+        let glowView = NSView(frame: NSRect(x: circleX - 4, y: y - 4, width: circleSize + 8, height: circleSize + 8))
+        glowView.wantsLayer = true
+        glowView.layer?.cornerRadius = (circleSize + 8) / 2
+        glowView.layer?.backgroundColor = NSColor.clear.cgColor
+        glowView.layer?.shadowColor = NSColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 1.0).cgColor
+        glowView.layer?.shadowOffset = .zero
+        glowView.layer?.shadowRadius = 12
+        glowView.layer?.shadowOpacity = 0.4
+
+        idleView.addSubview(glowView)
+        idleView.addSubview(circleButton)
+        idleView.addSubview(startLabel)
         idleView.addSubview(separator)
         idleView.addSubview(loginCheckbox)
+        idleView.addSubview(quitLabel)
         idleView.addSubview(quitButton)
 
         view.addSubview(idleView)
