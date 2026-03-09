@@ -19,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var recordStartTime: Date?
     private var activity: NSObjectProtocol?
 
+
     enum State {
         case idle, waiting, recording, processing
     }
@@ -58,6 +59,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         popoverController = RecordingPopoverController()
         popoverController.delegate = self
+        popoverController.onSizeChange = { [weak self] size in
+            self?.popover.contentSize = size
+        }
 
         popover.contentViewController = popoverController
         popover.behavior = .transient
@@ -77,6 +81,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             guard let button = statusItem.button else { return }
             popoverController.updateState(mapState(state))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 

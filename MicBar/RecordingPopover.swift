@@ -84,10 +84,14 @@ class RecordingPopoverController: NSViewController {
         }
     }
 
+    var onSizeChange: ((NSSize) -> Void)?
+
     private func setViewHeight(_ activeView: NSView) {
-        let h = activeView.frame.height
-        view.frame.size.height = h
-        preferredContentSize = NSSize(width: W, height: h)
+        let size = NSSize(width: W, height: activeView.frame.height)
+        activeView.frame.origin = .zero
+        view.frame.size = size
+        preferredContentSize = size
+        onSizeChange?(size)
     }
 
     // MARK: - Idle View
@@ -165,35 +169,45 @@ class RecordingPopoverController: NSViewController {
         let btnH: CGFloat = 36
         let btnGap: CGFloat = 8
         let statusH: CGFloat = 20
-        let topGap: CGFloat = 14
-        let cancelH: CGFloat = 20
-        let cancelGap: CGFloat = 6
-        let totalH: CGFloat = pad + cancelH + cancelGap + btnH + btnGap + btnH + topGap + statusH + pad
+        let statusGap: CGFloat = 10
+        let cancelH: CGFloat = 16
+        let hintH: CGFloat = 14
+        let hintGap: CGFloat = 4
+        let totalH: CGFloat = pad + cancelH + hintGap + hintH + btnGap + btnH + btnGap + btnH + statusGap + statusH + pad
 
         recordingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         recordingView.wantsLayer = true
 
         var y = pad
 
-        // Cancel link at bottom
-        let cancelButton = NSButton(frame: NSRect(x: pad, y: y, width: W - pad * 2, height: cancelH))
-        cancelButton.title = "Cancel Recording"
-        cancelButton.bezelStyle = .recessed
+        // Cancel — plain text link
+        let cancelLabel = NSTextField(labelWithString: "Cancel")
+        cancelLabel.frame = NSRect(x: 0, y: y, width: W, height: cancelH)
+        cancelLabel.font = .systemFont(ofSize: 11)
+        cancelLabel.textColor = .tertiaryLabelColor
+        cancelLabel.alignment = .center
+
+        let cancelButton = NSButton(frame: NSRect(x: 0, y: y, width: W, height: cancelH))
+        cancelButton.title = ""
+        cancelButton.isTransparent = true
         cancelButton.target = self
         cancelButton.action = #selector(cancelClicked)
-        cancelButton.controlSize = .small
-        cancelButton.font = .systemFont(ofSize: 11)
-        cancelButton.contentTintColor = .secondaryLabelColor
-        cancelButton.keyEquivalent = "\u{1b}" // Escape key
-        y += cancelH + cancelGap
+        cancelButton.keyEquivalent = "\u{1b}"
+        y += cancelH + hintGap
+
+        // Keyboard hints line
+        let hintsLabel = NSTextField(labelWithString: "\u{21A9} Stop & Copy     \u{2318}I Improve     Esc Cancel")
+        hintsLabel.frame = NSRect(x: 0, y: y, width: W, height: hintH)
+        hintsLabel.font = .systemFont(ofSize: 10)
+        hintsLabel.textColor = .quaternaryLabelColor
+        hintsLabel.alignment = .center
+        y += hintH + btnGap
 
         // Secondary button
         let stopImproveButton = makeButton(
             title: "Stop, Improve & Copy",
             action: #selector(stopImproveClicked),
-            isPrimary: false,
-            icon: "sparkles",
-            shortcut: "\u{2318}I"
+            isPrimary: false
         )
         stopImproveButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
         y += btnH + btnGap
@@ -202,37 +216,39 @@ class RecordingPopoverController: NSViewController {
         let stopCopyButton = makeButton(
             title: "Stop & Copy",
             action: #selector(stopCopyClicked),
-            isPrimary: true,
-            icon: "stop.circle.fill",
-            shortcut: "\u{2318}C"
+            isPrimary: true
         )
         stopCopyButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
-        y += btnH + topGap
+        y += btnH + statusGap
 
         // Status row: red dot + "Recording" left, timer right
         let dotSize: CGFloat = 10
-        let glowSize: CGFloat = 18
-        let dotX: CGFloat = pad
+        let glowSize: CGFloat = 24
+        let dotCenterX = pad + glowSize / 2
         let dotCenterY = y + statusH / 2
 
         redDotGlow = NSView(frame: NSRect(
-            x: dotX - (glowSize - dotSize) / 2,
+            x: dotCenterX - glowSize / 2,
             y: dotCenterY - glowSize / 2,
             width: glowSize, height: glowSize
         ))
         redDotGlow.wantsLayer = true
-        redDotGlow.layer?.backgroundColor = NSColor.systemRed.withAlphaComponent(0.25).cgColor
+        redDotGlow.layer?.backgroundColor = NSColor.clear.cgColor
         redDotGlow.layer?.cornerRadius = glowSize / 2
+        redDotGlow.layer?.shadowColor = NSColor(red: 1.0, green: 0.15, blue: 0.15, alpha: 1.0).cgColor
+        redDotGlow.layer?.shadowOffset = .zero
+        redDotGlow.layer?.shadowRadius = 8
+        redDotGlow.layer?.shadowOpacity = 0.9
 
         redDot = NSView(frame: NSRect(
-            x: dotX, y: dotCenterY - dotSize / 2,
+            x: dotCenterX - dotSize / 2, y: dotCenterY - dotSize / 2,
             width: dotSize, height: dotSize
         ))
         redDot.wantsLayer = true
-        redDot.layer?.backgroundColor = NSColor.systemRed.cgColor
+        redDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.25, blue: 0.25, alpha: 1.0).cgColor
         redDot.layer?.cornerRadius = dotSize / 2
 
-        let labelX = dotX + glowSize + 4
+        let labelX = pad + glowSize + 6
         let recordingLabel = NSTextField(labelWithString: "Recording")
         recordingLabel.frame = NSRect(x: labelX, y: y, width: 100, height: statusH)
         recordingLabel.font = .systemFont(ofSize: 13, weight: .medium)
@@ -250,6 +266,8 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(timerLabel)
         recordingView.addSubview(stopCopyButton)
         recordingView.addSubview(stopImproveButton)
+        recordingView.addSubview(hintsLabel)
+        recordingView.addSubview(cancelLabel)
         recordingView.addSubview(cancelButton)
 
         view.addSubview(recordingView)
@@ -280,50 +298,14 @@ class RecordingPopoverController: NSViewController {
 
     // MARK: - Helpers
 
-    private func makeButton(title: String, action: Selector, isPrimary: Bool, icon: String? = nil, shortcut: String? = nil) -> NSButton {
+    private func makeButton(title: String, action: Selector, isPrimary: Bool) -> NSButton {
         let button = NSButton(frame: .zero)
+        button.title = title
         button.target = self
         button.action = action
         button.bezelStyle = .rounded
         button.controlSize = .large
-
-        let weight: NSFont.Weight = isPrimary ? .semibold : .regular
-        let primaryColor = isPrimary ? NSColor.white : NSColor.labelColor
-        let hintColor = isPrimary ? NSColor.white.withAlphaComponent(0.6) : NSColor.tertiaryLabelColor
-
-        let attrStr = NSMutableAttributedString()
-
-        if let iconName = icon,
-           let img = NSImage(systemSymbolName: iconName, accessibilityDescription: nil) {
-            let attachment = NSTextAttachment()
-            attachment.image = img
-            attrStr.append(NSAttributedString(attachment: attachment))
-            attrStr.append(NSAttributedString(string: " "))
-        }
-
-        let titlePart = NSAttributedString(string: title, attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: weight),
-            .foregroundColor: primaryColor
-        ])
-        attrStr.append(titlePart)
-
-        if let sc = shortcut {
-            let hintPart = NSAttributedString(string: "  \(sc)", attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .regular),
-                .foregroundColor: hintColor
-            ])
-            attrStr.append(hintPart)
-        }
-
-        // Apply base font to icon attachment range too
-        if attrStr.length > 0 {
-            attrStr.addAttributes([
-                .font: NSFont.systemFont(ofSize: 13, weight: weight),
-                .foregroundColor: primaryColor
-            ], range: NSRange(location: 0, length: min(2, attrStr.length)))
-        }
-
-        button.attributedTitle = attrStr
+        button.font = .systemFont(ofSize: 13, weight: isPrimary ? .semibold : .regular)
 
         if isPrimary {
             button.keyEquivalent = "\r"
@@ -362,21 +344,31 @@ class RecordingPopoverController: NSViewController {
     // MARK: - Pulse Animation
 
     private func startPulse() {
-        var glowVisible = true
-        pulseAnimation = Timer.scheduledTimer(withTimeInterval: 0.8, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.4
-                self.redDotGlow.animator().alphaValue = glowVisible ? 0.2 : 1.0
-                self.redDot.animator().alphaValue = glowVisible ? 0.5 : 1.0
-            }
-            glowVisible.toggle()
-        }
+        // Use CABasicAnimation for smooth shadow pulse
+        let shadowAnim = CABasicAnimation(keyPath: "shadowOpacity")
+        shadowAnim.fromValue = 0.9
+        shadowAnim.toValue = 0.0
+        shadowAnim.duration = 1.0
+        shadowAnim.autoreverses = true
+        shadowAnim.repeatCount = .infinity
+        shadowAnim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        redDotGlow?.layer?.add(shadowAnim, forKey: "pulse")
+
+        let dotAnim = CABasicAnimation(keyPath: "opacity")
+        dotAnim.fromValue = 1.0
+        dotAnim.toValue = 0.4
+        dotAnim.duration = 1.0
+        dotAnim.autoreverses = true
+        dotAnim.repeatCount = .infinity
+        dotAnim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        redDot?.layer?.add(dotAnim, forKey: "pulse")
     }
 
     private func stopPulse() {
         pulseAnimation?.invalidate()
         pulseAnimation = nil
+        redDotGlow?.layer?.removeAnimation(forKey: "pulse")
+        redDot?.layer?.removeAnimation(forKey: "pulse")
         redDotGlow?.alphaValue = 1.0
         redDot?.alphaValue = 1.0
     }
