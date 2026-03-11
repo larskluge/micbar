@@ -10,6 +10,10 @@ let package = Package(
             path: "MicBar",
             exclude: ["Info.plist"],
             resources: [.process("Resources")]
+        ),
+        .testTarget(
+            name: "MicBarTests",
+            path: "Tests"
         )
     ]
 )
