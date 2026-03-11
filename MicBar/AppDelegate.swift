@@ -193,8 +193,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 return
             }
 
+            var improveFailed = false
             if improve {
-                text = self.improveWriting(text)
+                if let improved = self.improveWriting(text) {
+                    text = improved
+                } else {
+                    improveFailed = true
+                }
             }
 
             let pasteboard = NSPasteboard.general
@@ -202,72 +207,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             pasteboard.setString(text, forType: .string)
 
             let preview = text.count > 80 ? String(text.prefix(80)) + "..." : text
-            let label = improve ? "Improved & copied to clipboard" : "Copied to clipboard"
+            let label: String
+            if improveFailed {
+                label = "Improve failed — raw transcript copied"
+            } else if improve {
+                label = "Improved & copied to clipboard"
+            } else {
+                label = "Copied to clipboard"
+            }
 
             DispatchQueue.main.async {
                 self.popover.performClose(nil)
-                self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve)
+                self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve || improveFailed)
                 self.log.info("copied to clipboard, notified")
                 self.state = .idle
             }
         }
     }
 
-    private func improveWriting(_ text: String) -> String {
-        log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
-        let startTime = Date()
-
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["improve-writing"]
-
-        var environment = ProcessInfo.processInfo.environment
-        if let path = environment["PATH"], !path.contains("/opt/homebrew/bin") {
-            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(path)"
-        }
-        proc.environment = environment
-
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        proc.standardInput = stdinPipe
-        proc.standardOutput = stdoutPipe
-        proc.standardError = stderrPipe
-
-        do {
-            try proc.run()
-            stdinPipe.fileHandleForWriting.write(text.data(using: .utf8) ?? Data())
-            stdinPipe.fileHandleForWriting.closeFile()
-
-            let timer = DispatchSource.makeTimerSource()
-            timer.schedule(deadline: .now() + 60)
-            timer.setEventHandler { [weak proc] in proc?.terminate() }
-            timer.resume()
-
-            proc.waitUntilExit()
-            timer.cancel()
-
-            let elapsed = -startTime.timeIntervalSinceNow
-            log.info("improve-writing rc=\(proc.terminationStatus), took \(String(format: "%.1f", elapsed))s")
-
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            if let stderrStr = String(data: stderrData, encoding: .utf8), !stderrStr.isEmpty {
-                log.debug("improve-writing stderr: \(String(stderrStr.prefix(500)))")
-            }
-
-            let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let improved = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-            if improved.isEmpty {
-                log.warning("improve-writing returned empty, using raw transcription")
-                return text
-            }
-            log.info("improve-writing output (\(improved.count) chars): \(String(improved.prefix(500)))")
-            return improved
-        } catch {
-            log.warning("improve-writing error: \(error)")
-            return text
-        }
+    private func improveWriting(_ text: String) -> String? {
+        runImproveWriting(text, log: log)
     }
 
     private func notify(title: String, body: String, transcribedText: String? = nil, includeImprove: Bool = false) {
@@ -305,16 +264,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self = self else { completionHandler(); return }
-                let improved = self.improveWriting(text)
+
+                let title: String
+                let result: String
+                if let improved = self.improveWriting(text) {
+                    title = "Improved & copied to clipboard"
+                    result = improved
+                } else {
+                    title = "Improve failed — raw transcript copied"
+                    result = text
+                }
 
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(improved, forType: .string)
+                NSPasteboard.general.setString(result, forType: .string)
 
-                let preview = improved.count > 80 ? String(improved.prefix(80)) + "..." : improved
+                let preview = result.count > 80 ? String(result.prefix(80)) + "..." : result
 
                 DispatchQueue.main.async {
-                    self.notify(title: "Improved & copied to clipboard", body: preview, transcribedText: improved)
-                    self.log.info("improved from notification, copied to clipboard")
+                    self.notify(title: title, body: preview, transcribedText: result)
+                    self.log.info("copied to clipboard, notified")
                     self.state = .idle
                     completionHandler()
                 }
