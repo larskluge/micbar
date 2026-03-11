@@ -14,10 +14,7 @@ build:
 run: build
 	open $(APP_BUNDLE)
 
-test:
-	DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test
-
 clean:
 	rm -rf build .build
 
-.PHONY: build run test clean
+.PHONY: build run clean

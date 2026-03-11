@@ -16,6 +16,12 @@ source venv/bin/activate
 pip install rumps
 ```
 
+## Testing
+
+```bash
+swift test
+```
+
 ## Usage
 
 ### Run manually
