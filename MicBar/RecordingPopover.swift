@@ -6,9 +6,8 @@ protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopCopy()
     func popoverDidRequestStopImprove()
     func popoverDidRequestCancel()
-    func popoverDidRequestToggleLogin()
+    func popoverDidRequestShowHistory()
     func popoverDidRequestQuit()
-    var isLoginEnabled: Bool { get }
 }
 
 class RecordingPopoverController: NSViewController {
@@ -21,7 +20,6 @@ class RecordingPopoverController: NSViewController {
     private var timerLabel: NSTextField!
     private var redDot: NSView!
     private var redDotGlow: NSView!
-    private var loginCheckbox: NSButton!
 
     private var displayTimer: Timer?
     private var recordingStartTime: Date?
@@ -67,7 +65,7 @@ class RecordingPopoverController: NSViewController {
         switch state {
         case .idle:
             idleView.isHidden = false
-            loginCheckbox.state = delegate?.isLoginEnabled == true ? .on : .off
+            // idle view shown
             setViewHeight(idleView)
         case .waiting:
             recordingView.isHidden = false
@@ -110,12 +108,17 @@ class RecordingPopoverController: NSViewController {
 
         var y = pad
 
-        // Footer row: Login checkbox left, Quit right
-        loginCheckbox = NSButton(checkboxWithTitle: "Launch at Login", target: self, action: #selector(loginClicked))
-        loginCheckbox.frame = NSRect(x: pad, y: y, width: 160, height: footerH)
-        loginCheckbox.controlSize = .small
-        loginCheckbox.font = .systemFont(ofSize: 12)
-        loginCheckbox.contentTintColor = .secondaryLabelColor
+        // Footer row: History left, Quit right
+        let historyLabel = NSTextField(labelWithString: "History")
+        historyLabel.frame = NSRect(x: pad, y: y - 1, width: 50, height: footerH)
+        historyLabel.font = .systemFont(ofSize: 12)
+        historyLabel.textColor = .secondaryLabelColor
+
+        let historyButton = NSButton(frame: NSRect(x: pad, y: y - 1, width: 50, height: footerH))
+        historyButton.title = ""
+        historyButton.isTransparent = true
+        historyButton.target = self
+        historyButton.action = #selector(historyClicked)
 
         let quitLabel = NSTextField(labelWithString: "Quit")
         quitLabel.frame = NSRect(x: W - pad - 36, y: y - 1, width: 36, height: footerH)
@@ -200,7 +203,8 @@ class RecordingPopoverController: NSViewController {
         idleView.addSubview(circleButton)
         idleView.addSubview(startLabel)
         idleView.addSubview(separator)
-        idleView.addSubview(loginCheckbox)
+        idleView.addSubview(historyLabel)
+        idleView.addSubview(historyButton)
         idleView.addSubview(quitLabel)
         idleView.addSubview(quitButton)
 
@@ -436,8 +440,8 @@ class RecordingPopoverController: NSViewController {
         delegate?.popoverDidRequestCancel()
     }
 
-    @objc private func loginClicked() {
-        delegate?.popoverDidRequestToggleLogin()
+    @objc private func historyClicked() {
+        delegate?.popoverDidRequestShowHistory()
     }
 
     @objc private func quitClicked() {

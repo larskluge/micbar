@@ -1,6 +1,5 @@
 import AppKit
 import UserNotifications
-import ServiceManagement
 
 private let improveActionID = "IMPROVE_ACTION"
 private let copyActionID = "COPY_ACTION"
@@ -18,6 +17,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private let log = Logger.shared
     private var recordStartTime: Date?
     private var activity: NSObjectProtocol?
+
+    let transcriptStore = TranscriptStore()
+    private lazy var historyWindowController = HistoryWindowController(store: transcriptStore)
 
 
     enum State {
@@ -120,10 +122,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - RecordingPopoverDelegate
 
-    var isLoginEnabled: Bool {
-        SMAppService.mainApp.status == .enabled
-    }
-
     func popoverDidRequestStart() {
         startRecording()
     }
@@ -140,8 +138,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         cancelRecording()
     }
 
-    func popoverDidRequestToggleLogin() {
-        toggleLogin()
+    func popoverDidRequestShowHistory() {
+        popover.performClose(nil)
+        historyWindowController.showWindow()
     }
 
     func popoverDidRequestQuit() {
@@ -193,6 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 return
             }
 
+            let rawText = text
             var improveFailed = false
             if improve {
                 if let improved = self.improveWriting(text) {
@@ -216,7 +216,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 label = "Copied to clipboard"
             }
 
+            let improvedText = (improve && !improveFailed) ? text : nil
+
             DispatchQueue.main.async {
+                self.transcriptStore.addTranscript(raw: rawText, improved: improvedText)
                 self.popover.performClose(nil)
                 self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve || improveFailed)
                 self.log.info("copied to clipboard, notified")
@@ -281,6 +284,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 let preview = result.count > 80 ? String(result.prefix(80)) + "..." : result
 
                 DispatchQueue.main.async {
+                    // Find the most recent transcript with this raw text and update its improved text
+                    if let record = self.transcriptStore.records.first(where: { $0.rawText == text }) {
+                        self.transcriptStore.updateImprovedText(id: record.id, text: result)
+                    }
                     self.notify(title: title, body: preview, transcribedText: result)
                     self.log.info("copied to clipboard, notified")
                     self.state = .idle
@@ -302,20 +309,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func popoverShouldClose(_ popover: NSPopover) -> Bool {
         // Don't allow click-outside dismissal while recording or waiting
         return state == .idle || state == .processing
-    }
-
-    private func toggleLogin() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-                log.info("login item disabled")
-            } else {
-                try SMAppService.mainApp.register()
-                log.info("login item enabled")
-            }
-        } catch {
-            log.warning("login item toggle error: \(error)")
-        }
     }
 
     private func quit() {
