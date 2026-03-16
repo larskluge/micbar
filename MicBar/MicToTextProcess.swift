@@ -2,6 +2,7 @@ import Foundation
 
 final class MicToTextProcess {
     private var pid: pid_t = 0
+    private var pgid: pid_t = 0  // saved separately so we can clean up after waitpid
     private var stdoutReadFD: Int32 = -1
     private var stderrReadFD: Int32 = -1
     private let log = Logger.shared
@@ -70,7 +71,8 @@ final class MicToTextProcess {
             return false
         }
 
-        log.info("mictotext started PID=\(pid)")
+        pgid = pid  // process is its own group leader (POSIX_SPAWN_SETPGROUP)
+        log.info("mictotext started PID=\(pid) PGID=\(pgid)")
         startStderrMonitor()
         logProcessTree()
         return true
@@ -82,22 +84,43 @@ final class MicToTextProcess {
             return nil
         }
 
-        log.info("stopping mictotext PID=\(pid)")
-        kill(-pid, SIGINT)
+        let savedPgid = pgid
+        log.info("stopping mictotext PID=\(pid) PGID=\(savedPgid)")
+        kill(-savedPgid, SIGINT)
         log.debug("SIGINT sent, reading stdout...")
 
         let stdoutData = readAll(fd: stdoutReadFD)
         close(stdoutReadFD)
         stdoutReadFD = -1
 
+        // Wait for mictotext with timeout — escalate to SIGKILL if stuck
         var status: Int32 = 0
-        waitpid(pid, &status, 0)
+        var reaped = false
+        for _ in 0..<30 {  // up to 3 seconds
+            if waitpid(pid, &status, WNOHANG) > 0 {
+                reaped = true
+                break
+            }
+            usleep(100_000)
+        }
+
+        if !reaped {
+            log.warning("mictotext did not exit after SIGINT, sending SIGKILL to group \(savedPgid)")
+            kill(-savedPgid, SIGKILL)
+            waitpid(pid, &status, 0)
+        }
+
         let exitCode = (status & 0x7f) == 0 ? Int32((status >> 8) & 0xff) : Int32(-1)
         log.info("mictotext exited rc=\(exitCode)")
+
+        // Kill any surviving children in the process group (e.g. FFmpeg)
+        kill(-savedPgid, SIGKILL)
+        log.debug("SIGKILL sent to group \(savedPgid) to clean up children")
 
         close(stderrReadFD)
         stderrReadFD = -1
         pid = 0
+        pgid = 0
 
         let text = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         log.info("transcription (\(text.count) chars): \(String(text.prefix(500)))")
@@ -106,8 +129,9 @@ final class MicToTextProcess {
 
     func forceKill() {
         guard pid > 0 else { return }
-        log.info("killing mictotext PID=\(pid)")
-        Darwin.kill(-pid, SIGKILL)
+        let savedPgid = pgid
+        log.info("killing mictotext PID=\(pid) PGID=\(savedPgid)")
+        kill(-savedPgid, SIGKILL)
         close(stdoutReadFD)
         stdoutReadFD = -1
         close(stderrReadFD)
@@ -116,6 +140,16 @@ final class MicToTextProcess {
         waitpid(pid, &status, 0)
         log.info("mictotext killed")
         pid = 0
+        pgid = 0
+    }
+
+    deinit {
+        if pid > 0 {
+            log.warning("MicToTextProcess deallocated with running process, force killing PGID=\(pgid)")
+            kill(-pgid, SIGKILL)
+            var status: Int32 = 0
+            waitpid(pid, &status, 0)
+        }
     }
 
     var isRunning: Bool { pid > 0 }

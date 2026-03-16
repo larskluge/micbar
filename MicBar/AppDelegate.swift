@@ -25,6 +25,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         didSet { updateUI() }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        if process.isRunning {
+            log.info("app terminating, killing recording process")
+            process.forceKill()
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.info("=== micbar starting ===")
         log.info("PID=\(ProcessInfo.processInfo.processIdentifier)  PPID=\(getppid())")
