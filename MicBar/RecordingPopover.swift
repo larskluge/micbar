@@ -2,18 +2,14 @@ import AppKit
 import QuartzCore
 
 protocol RecordingPopoverDelegate: AnyObject {
-    func popoverDidRequestStart()
     func popoverDidRequestStopCopy()
     func popoverDidRequestStopImprove()
     func popoverDidRequestCancel()
-    func popoverDidRequestShowHistory()
-    func popoverDidRequestQuit()
 }
 
 class RecordingPopoverController: NSViewController {
     weak var delegate: RecordingPopoverDelegate?
 
-    private var idleView: NSView!
     private var recordingView: NSView!
     private var processingView: NSView!
 
@@ -37,11 +33,10 @@ class RecordingPopoverController: NSViewController {
         view = NSView(frame: NSRect(x: 0, y: 0, width: W, height: 200))
         view.wantsLayer = true
 
-        buildIdleView()
         buildRecordingView()
         buildProcessingView()
 
-        showState(.idle)
+        showState(.waiting)
     }
 
     func updateState(_ state: AppDelegateState) {
@@ -56,7 +51,6 @@ class RecordingPopoverController: NSViewController {
     }
 
     private func showState(_ state: AppDelegateState) {
-        idleView.isHidden = true
         recordingView.isHidden = true
         processingView.isHidden = true
         stopTimer()
@@ -64,9 +58,8 @@ class RecordingPopoverController: NSViewController {
 
         switch state {
         case .idle:
-            idleView.isHidden = false
-            // idle view shown
-            setViewHeight(idleView)
+            recordingView.isHidden = false
+            setViewHeight(recordingView)
         case .waiting:
             recordingView.isHidden = false
             timerLabel.stringValue = "Starting..."
@@ -90,125 +83,6 @@ class RecordingPopoverController: NSViewController {
         view.frame.size = size
         preferredContentSize = size
         onSizeChange?(size)
-    }
-
-    // MARK: - Idle View
-
-    private func buildIdleView() {
-        let pad: CGFloat = 16
-        let footerH: CGFloat = 24
-        let circleSize: CGFloat = 72
-        let labelH: CGFloat = 16
-        let labelGap: CGFloat = 10
-        let sepGap: CGFloat = 12
-        let totalH: CGFloat = pad + footerH + sepGap + 1 + sepGap + labelH + labelGap + circleSize + pad
-
-        idleView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
-        idleView.wantsLayer = true
-
-        var y = pad
-
-        // Footer row: History left, Quit right
-        let historyLabel = NSTextField(labelWithString: "History & Settings")
-        historyLabel.frame = NSRect(x: pad, y: y - 1, width: 110, height: footerH)
-        historyLabel.font = .systemFont(ofSize: 12)
-        historyLabel.textColor = .secondaryLabelColor
-
-        let historyButton = NSButton(frame: NSRect(x: pad, y: y - 1, width: 110, height: footerH))
-        historyButton.title = ""
-        historyButton.isTransparent = true
-        historyButton.target = self
-        historyButton.action = #selector(historyClicked)
-
-        let quitLabel = NSTextField(labelWithString: "Quit")
-        quitLabel.frame = NSRect(x: W - pad - 36, y: y - 1, width: 36, height: footerH)
-        quitLabel.font = .systemFont(ofSize: 12)
-        quitLabel.textColor = .secondaryLabelColor
-        quitLabel.alignment = .right
-
-        let quitButton = NSButton(frame: NSRect(x: W - pad - 36, y: y - 1, width: 36, height: footerH))
-        quitButton.title = ""
-        quitButton.isTransparent = true
-        quitButton.target = self
-        quitButton.action = #selector(quitClicked)
-
-        y += footerH + sepGap
-
-        let separator = NSBox(frame: NSRect(x: pad, y: y, width: W - pad * 2, height: 1))
-        separator.boxType = .separator
-        y += 1 + sepGap
-
-        // Subtle hint below button
-        let startLabel = NSTextField(labelWithString: "Record")
-        startLabel.frame = NSRect(x: 0, y: y, width: W, height: labelH)
-        startLabel.font = .systemFont(ofSize: 10)
-        startLabel.textColor = .tertiaryLabelColor
-        startLabel.alignment = .center
-        y += labelH + labelGap
-
-        // Big circular red record button
-        let circleX = (W - circleSize) / 2
-        let circleButton = NSButton(frame: NSRect(x: circleX, y: y, width: circleSize, height: circleSize))
-        circleButton.bezelStyle = .circular
-        circleButton.isBordered = false
-        circleButton.wantsLayer = true
-        circleButton.layer?.cornerRadius = circleSize / 2
-        circleButton.layer?.backgroundColor = NSColor(red: 0.88, green: 0.14, blue: 0.14, alpha: 1.0).cgColor
-
-        // Radial gradient overlay for 3D depth
-        let gradient = CAGradientLayer()
-        gradient.type = .radial
-        gradient.frame = CGRect(x: 0, y: 0, width: circleSize, height: circleSize)
-        gradient.cornerRadius = circleSize / 2
-        gradient.colors = [
-            NSColor.white.withAlphaComponent(0.25).cgColor,
-            NSColor.white.withAlphaComponent(0.0).cgColor,
-            NSColor.black.withAlphaComponent(0.15).cgColor
-        ]
-        gradient.locations = [0.0, 0.45, 1.0]
-        gradient.startPoint = CGPoint(x: 0.45, y: 0.65)
-        gradient.endPoint = CGPoint(x: 1.0, y: 1.0)
-        circleButton.layer?.addSublayer(gradient)
-        circleButton.target = self
-        circleButton.action = #selector(startClicked)
-        circleButton.keyEquivalent = "\r"
-
-        // Space bar also triggers start
-        let spaceButton = NSButton(frame: .zero)
-        spaceButton.isTransparent = true
-        spaceButton.target = self
-        spaceButton.action = #selector(startClicked)
-        spaceButton.keyEquivalent = " "
-        idleView.addSubview(spaceButton)
-
-        // Mic icon centered in the circle
-        if let micImg = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 26, weight: .medium)) {
-            circleButton.image = micImg
-            circleButton.imagePosition = .imageOnly
-            circleButton.contentTintColor = .white
-        }
-
-        // Glow behind the button
-        let glowView = NSView(frame: NSRect(x: circleX - 4, y: y - 4, width: circleSize + 8, height: circleSize + 8))
-        glowView.wantsLayer = true
-        glowView.layer?.cornerRadius = (circleSize + 8) / 2
-        glowView.layer?.backgroundColor = NSColor.clear.cgColor
-        glowView.layer?.shadowColor = NSColor(red: 1.0, green: 0.2, blue: 0.2, alpha: 1.0).cgColor
-        glowView.layer?.shadowOffset = .zero
-        glowView.layer?.shadowRadius = 12
-        glowView.layer?.shadowOpacity = 0.4
-
-        idleView.addSubview(glowView)
-        idleView.addSubview(circleButton)
-        idleView.addSubview(startLabel)
-        idleView.addSubview(separator)
-        idleView.addSubview(historyLabel)
-        idleView.addSubview(historyButton)
-        idleView.addSubview(quitLabel)
-        idleView.addSubview(quitButton)
-
-        view.addSubview(idleView)
     }
 
     // MARK: - Recording View
@@ -424,10 +298,6 @@ class RecordingPopoverController: NSViewController {
 
     // MARK: - Actions
 
-    @objc private func startClicked() {
-        delegate?.popoverDidRequestStart()
-    }
-
     @objc private func stopCopyClicked() {
         delegate?.popoverDidRequestStopCopy()
     }
@@ -438,13 +308,5 @@ class RecordingPopoverController: NSViewController {
 
     @objc private func cancelClicked() {
         delegate?.popoverDidRequestCancel()
-    }
-
-    @objc private func historyClicked() {
-        delegate?.popoverDidRequestShowHistory()
-    }
-
-    @objc private func quitClicked() {
-        delegate?.popoverDidRequestQuit()
     }
 }

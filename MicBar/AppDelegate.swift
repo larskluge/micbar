@@ -11,7 +11,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var popoverController: RecordingPopoverController!
-    private var eventMonitor: Any?
 
     private let process = MicToTextProcess()
     private let log = Logger.shared
@@ -24,7 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         onRecord: { [weak self] in self?.startRecording() },
         onStop: { [weak self] in self?.stopAndFinish(improve: false) }
     )
-
 
     enum State {
         case idle, waiting, recording, processing
@@ -75,21 +73,44 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover.delegate = self
 
         if let button = statusItem.button {
-            button.action = #selector(togglePopover)
+            button.action = #selector(statusItemClicked)
             button.target = self
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
     }
 
-    @objc private func togglePopover() {
-        if popover.isShown {
-            popover.performClose(nil)
+    @objc private func statusItemClicked() {
+        guard let event = NSApp.currentEvent else { return }
+        if event.type == .rightMouseUp {
+            historyWindowController.showWindow()
         } else {
-            guard let button = statusItem.button else { return }
-            popoverController.updateState(mapState(state))
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            NSApp.activate(ignoringOtherApps: true)
-            popover.contentViewController?.view.window?.makeKey()
+            handleLeftClick()
         }
+    }
+
+    private func handleLeftClick() {
+        switch state {
+        case .idle:
+            startRecording()
+        case .waiting:
+            break
+        case .recording:
+            if popover.isShown {
+                popover.performClose(nil)
+            } else {
+                showPopover()
+            }
+        case .processing:
+            break
+        }
+    }
+
+    private func showPopover() {
+        guard let button = statusItem.button else { return }
+        popoverController.updateState(mapState(state))
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        NSApp.activate(ignoringOtherApps: true)
+        popover.contentViewController?.view.window?.makeKey()
     }
 
     private func mapState(_ s: State) -> RecordingPopoverController.AppDelegateState {
@@ -132,10 +153,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - RecordingPopoverDelegate
 
-    func popoverDidRequestStart() {
-        startRecording()
-    }
-
     func popoverDidRequestStopCopy() {
         stopAndFinish(improve: false)
     }
@@ -146,15 +163,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func popoverDidRequestCancel() {
         cancelRecording()
-    }
-
-    func popoverDidRequestShowHistory() {
-        popover.performClose(nil)
-        historyWindowController.showWindow()
-    }
-
-    func popoverDidRequestQuit() {
-        quit()
     }
 
     // MARK: - Recording
@@ -170,6 +178,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         if process.start() {
             state = .waiting
+            showPopover()
         } else {
             log.warning("failed to start mictotext")
             notify(title: "MicBar", body: "Failed to start mictotext")
@@ -322,10 +331,4 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         return state == .idle || state == .processing
     }
 
-    private func quit() {
-        if process.isRunning {
-            _ = process.stop()
-        }
-        NSApp.terminate(nil)
-    }
 }
