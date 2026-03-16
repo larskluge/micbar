@@ -3,7 +3,24 @@ import ServiceManagement
 
 struct HistoryView: View {
     @ObservedObject var store: TranscriptStore
-    @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+    @State private var selectedTab = 0
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            TranscriptsTab(store: store)
+                .tabItem { Label("History", systemImage: "clock") }
+                .tag(0)
+
+            SettingsTab()
+                .tabItem { Label("Settings", systemImage: "gear") }
+                .tag(1)
+        }
+        .frame(minWidth: 600, idealWidth: 900, minHeight: 500, idealHeight: 700)
+    }
+}
+
+struct TranscriptsTab: View {
+    @ObservedObject var store: TranscriptStore
 
     private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -12,44 +29,54 @@ struct HistoryView: View {
     }()
 
     var body: some View {
-        VStack(spacing: 0) {
-            if store.records.isEmpty {
+        if store.records.isEmpty {
+            VStack {
                 Spacer()
                 Text("No transcripts yet")
                     .foregroundColor(.secondary)
                     .font(.system(size: 14))
                 Spacer()
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 10) {
-                        ForEach(store.records) { record in
-                            TranscriptCard(record: record, store: store, formatter: timestampFormatter)
-                        }
-                    }
-                    .padding(16)
-                }
             }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(store.records) { record in
+                        TranscriptCard(record: record, store: store, formatter: timestampFormatter)
+                    }
+                }
+                .padding(20)
+            }
+        }
+    }
+}
 
-            Divider()
+struct SettingsTab: View {
+    @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+    @StateObject private var checker = DependencyChecker()
 
-            // Settings section
-            VStack(spacing: 12) {
+    var body: some View {
+        VStack(spacing: 0) {
+            Form {
+                DependenciesSection(checker: checker)
+
                 Toggle("Launch at Login", isOn: $loginEnabled)
-                    .toggleStyle(.switch)
                     .onChange(of: loginEnabled) { newValue in
                         toggleLogin(newValue)
                     }
-
-                Button("Quit") {
-                    NSApp.terminate(nil)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .font(.system(size: 12))
             }
-            .padding(16)
+            .formStyle(.grouped)
+
+            Spacer()
+
+            Button("Quit MicBar") {
+                NSApp.terminate(nil)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.secondary)
+            .font(.system(size: 12))
+            .padding(.bottom, 20)
         }
-        .frame(minWidth: 420, minHeight: 300)
+        .onAppear { checker.checkAll() }
     }
 
     private func toggleLogin(_ enabled: Bool) {
@@ -70,6 +97,7 @@ struct TranscriptCard: View {
     let record: TranscriptRecord
     @ObservedObject var store: TranscriptStore
     let formatter: DateFormatter
+    @State private var copiedField: String?
 
     private var rawBinding: Binding<String> {
         Binding(
@@ -86,62 +114,18 @@ struct TranscriptCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             // Timestamp
             Text(formatter.string(from: record.timestamp))
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(Color(nsColor: .tertiaryLabelColor))
 
             // Raw text
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Transcript")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                    Spacer()
-                    Button(action: { copyText(rawBinding.wrappedValue) }) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 10))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
-                }
-
-                TextEditor(text: rawBinding)
-                    .font(.system(size: 13))
-                    .frame(minHeight: 40, maxHeight: 120)
-                    .scrollContentBackground(.hidden)
-                    .padding(6)
-                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                    .cornerRadius(6)
-            }
+            textBlock(label: "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue)
 
             // Improved text or Improve button
             if record.improvedText != nil {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Improved")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .textCase(.uppercase)
-                        Spacer()
-                        Button(action: { copyText(improvedBinding.wrappedValue) }) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 10))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.secondary)
-                    }
-
-                    TextEditor(text: improvedBinding)
-                        .font(.system(size: 13))
-                        .frame(minHeight: 40, maxHeight: 120)
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                        .cornerRadius(6)
-                }
+                textBlock(label: "Improved", text: improvedBinding, copyValue: improvedBinding.wrappedValue)
             } else if record.isImproving {
                 HStack(spacing: 6) {
                     ProgressView()
@@ -154,22 +138,156 @@ struct TranscriptCard: View {
             } else {
                 Button(action: { store.improveTranscript(id: record.id) }) {
                     Text("Improve")
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
+                        .font(.system(size: 11, weight: .medium))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .padding(.top, 2)
             }
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
-        .cornerRadius(10)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+        )
     }
 
-    private func copyText(_ text: String) {
+    private func textBlock(label: String, text: Binding<String>, copyValue: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+
+            HStack(alignment: .top, spacing: 8) {
+                TextEditor(text: text)
+                    .font(.system(size: 13))
+                    .frame(minHeight: 32, maxHeight: 100)
+                    .scrollContentBackground(.hidden)
+                    .padding(4)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.15))
+                    .cornerRadius(4)
+
+                Button(action: { copyText(copyValue, field: label) }) {
+                    Label(
+                        copiedField == label ? "Copied!" : "Copy",
+                        systemImage: copiedField == label ? "checkmark" : "doc.on.doc"
+                    )
+                    .font(.system(size: 11))
+                    .foregroundColor(copiedField == label ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+                .animation(.easeInOut(duration: 0.15), value: copiedField)
+            }
+        }
+    }
+
+    private func copyText(_ text: String, field: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        copiedField = field
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if copiedField == field { copiedField = nil }
+        }
+    }
+}
+
+struct DependenciesSection: View {
+    @ObservedObject var checker: DependencyChecker
+
+    var body: some View {
+        Section {
+            if checker.isChecking && checker.results.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                ForEach(checker.results) { dep in
+                    DependencyTree(dep: dep)
+                }
+            }
+        } header: {
+            HStack {
+                Text("Dependencies")
+                Spacer()
+                if checker.isChecking && !checker.results.isEmpty {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Button(action: { checker.checkAll() }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}
+
+struct DependencyTree: View {
+    let dep: DependencyStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Parent row
+            DependencyRow(dep: dep, isParent: true)
+
+            // Children
+            if !dep.children.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(dep.children) { child in
+                        HStack(spacing: 6) {
+                            Text("\u{2514}")
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundColor(Color(nsColor: .separatorColor))
+                            DependencyRow(dep: child, isParent: false)
+                        }
+                    }
+                }
+                .padding(.leading, 4)
+            }
+        }
+    }
+}
+
+struct DependencyRow: View {
+    let dep: DependencyStatus
+    let isParent: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 6))
+                .foregroundColor(dep.found ? .green : .red)
+
+            Text(dep.name)
+                .font(.system(size: isParent ? 13 : 12, weight: isParent ? .medium : .regular))
+                .foregroundColor(isParent ? .primary : .secondary)
+
+            if let path = dep.path {
+                Text(path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
+            Spacer()
+
+            if let error = dep.error {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundColor(.red)
+                    .lineLimit(1)
+            }
+        }
     }
 }

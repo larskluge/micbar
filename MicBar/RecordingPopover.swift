@@ -109,12 +109,12 @@ class RecordingPopoverController: NSViewController {
         var y = pad
 
         // Footer row: History left, Quit right
-        let historyLabel = NSTextField(labelWithString: "History")
-        historyLabel.frame = NSRect(x: pad, y: y - 1, width: 50, height: footerH)
+        let historyLabel = NSTextField(labelWithString: "History & Settings")
+        historyLabel.frame = NSRect(x: pad, y: y - 1, width: 110, height: footerH)
         historyLabel.font = .systemFont(ofSize: 12)
         historyLabel.textColor = .secondaryLabelColor
 
-        let historyButton = NSButton(frame: NSRect(x: pad, y: y - 1, width: 50, height: footerH))
+        let historyButton = NSButton(frame: NSRect(x: pad, y: y - 1, width: 110, height: footerH))
         historyButton.title = ""
         historyButton.isTransparent = true
         historyButton.target = self
