@@ -1,12 +1,6 @@
 import AppKit
 import UserNotifications
 
-private let improveActionID = "IMPROVE_ACTION"
-private let copyActionID = "COPY_ACTION"
-private let improveCategoryID = "TRANSCRIPTION_WITH_IMPROVE"
-private let copyCategoryID = "TRANSCRIPTION_COPY_ONLY"
-private let userInfoTextKey = "transcribedText"
-
 class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, RecordingPopoverDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
@@ -46,12 +40,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         center.requestAuthorization(options: [.alert, .sound]) { granted, error in
             self.log.info("notification auth: granted=\(granted) error=\(String(describing: error))")
         }
-
-        let copyAction = UNNotificationAction(identifier: copyActionID, title: "Copy", options: [])
-        let improveAction = UNNotificationAction(identifier: improveActionID, title: "Improve", options: [])
-        let improveCategory = UNNotificationCategory(identifier: improveCategoryID, actions: [copyAction, improveAction], intentIdentifiers: [])
-        let copyCategory = UNNotificationCategory(identifier: copyCategoryID, actions: [copyAction], intentIdentifiers: [])
-        center.setNotificationCategories([improveCategory, copyCategory])
 
         setupStatusItem()
         log.info("MicBar initialized")
@@ -240,7 +228,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             DispatchQueue.main.async {
                 self.transcriptStore.addTranscript(raw: rawText, improved: improvedText)
                 self.popover.performClose(nil)
-                self.notify(title: label, body: preview, transcribedText: text, includeImprove: !improve || improveFailed)
+                self.notify(title: label, body: preview)
                 self.log.info("copied to clipboard, notified")
                 self.state = .idle
             }
@@ -251,73 +239,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         runImproveWriting(text, log: log)
     }
 
-    private func notify(title: String, body: String, transcribedText: String? = nil, includeImprove: Bool = false) {
+    private func notify(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        if let text = transcribedText {
-            content.userInfo = [userInfoTextKey: text]
-            content.categoryIdentifier = includeImprove ? improveCategoryID : copyCategoryID
-        }
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        guard let text = response.notification.request.content.userInfo[userInfoTextKey] as? String else {
-            completionHandler()
-            return
-        }
-
-        switch response.actionIdentifier {
-        case copyActionID:
-            log.info("copy from notification (\(text.count) chars)")
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            completionHandler()
-
-        case improveActionID:
-            log.info("improve from notification (\(text.count) chars)")
-
-            let original = response.notification.request.content
-            notify(title: original.title, body: original.body, transcribedText: text)
-
-            state = .processing
-
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { completionHandler(); return }
-
-                let title: String
-                let result: String
-                if let improved = self.improveWriting(text) {
-                    title = "Improved & copied to clipboard"
-                    result = improved
-                } else {
-                    title = "Improve failed — raw transcript copied"
-                    result = text
-                }
-
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(result, forType: .string)
-
-                let preview = result.count > 80 ? String(result.prefix(80)) + "..." : result
-
-                DispatchQueue.main.async {
-                    // Find the most recent transcript with this raw text and update its improved text
-                    if let record = self.transcriptStore.records.first(where: { $0.rawText == text }) {
-                        self.transcriptStore.updateImprovedText(id: record.id, text: result)
-                    }
-                    self.notify(title: title, body: preview, transcribedText: result)
-                    self.log.info("copied to clipboard, notified")
-                    self.state = .idle
-                    completionHandler()
-                }
-            }
-
-        default:
-            historyWindowController.showWindow()
-            completionHandler()
-        }
+        historyWindowController.showWindow()
+        completionHandler()
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
