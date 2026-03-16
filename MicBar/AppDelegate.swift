@@ -6,7 +6,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private let popover = NSPopover()
     private var popoverController: RecordingPopoverController!
 
-    private let process = MicToTextProcess()
+    private let recorder = Recorder()
     private let log = Logger.shared
     private var recordStartTime: Date?
     private var activity: NSObjectProtocol?
@@ -26,9 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if process.isRunning {
-            log.info("app terminating, killing recording process")
-            process.forceKill()
+        if recorder.isRunning {
+            log.info("app terminating, killing recording")
+            recorder.forceKill()
         }
     }
 
@@ -171,11 +171,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         recordStartTime = Date()
         popoverController.setRecordingStartTime(recordStartTime!)
 
-        process.onReady = { [weak self] in
+        recorder.onReady = { [weak self] in
             self?.state = .recording
         }
 
-        if process.start() {
+        if recorder.start() {
             state = .waiting
             if showPopover {
                 self.showPopover()
@@ -188,7 +188,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func cancelRecording() {
         log.info("cancel: discarding recording")
-        process.forceKill()
+        recorder.forceKill()
         popover.performClose(nil)
         state = .idle
     }
@@ -203,7 +203,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let duration = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
             self.log.info("recorded \(String(format: "%.1f", duration))s by wall clock")
 
-            guard var text = self.process.stop(), !text.isEmpty else {
+            guard var text = self.recorder.stop(), !text.isEmpty else {
                 self.log.warning("no text from transcription")
                 DispatchQueue.main.async {
                     self.notify(title: "Recording", body: "No speech detected")
