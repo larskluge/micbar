@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-micbar is a native macOS menu bar app (Swift, AppKit) that records audio via an external `mictotext` CLI tool, then optionally improves the transcription via an LLM proxy before copying to clipboard.
+micbar is a native macOS menu bar app (Swift, AppKit) that records audio natively via AVFoundation, sends it to a WhisperKit server for transcription, then optionally improves the text via an LLM proxy before copying to clipboard.
 
 ## Building & Running
 
@@ -19,7 +19,7 @@ Requires Swift toolchain (Xcode Command Line Tools). No Xcode IDE needed.
 ## Dependencies
 
 - Swift Package Manager (no external packages)
-- External CLIs expected on PATH: `mictotext` (speech-to-text)
+- WhisperKit server on localhost:50060 (speech-to-text)
 - LLM proxy on localhost:8317 (OpenAI-compatible API for text improvement, optional)
 
 ## Architecture
@@ -31,12 +31,14 @@ Swift Package (Package.swift) producing an AppKit executable, wrapped into a .ap
 - `main.swift` — Entry point. Sets up NSApplication with accessory activation policy.
 - `AppDelegate.swift` — NSStatusBar menu bar UI, state machine (idle/waiting/recording/processing), popover management, notifications via UNUserNotificationCenter, Launch at Login via SMAppService. Left-click starts recording, right-click opens History & Settings.
 - `RecordingPopover.swift` — NSViewController-based popover with recording (stop/improve buttons, timer) and processing states. AppKit layout, no SwiftUI.
-- `MicToTextProcess.swift` — Manages the `mictotext` subprocess using `posix_spawnp` with `POSIX_SPAWN_SETPGROUP` (own process group). Monitors stderr on a background DispatchQueue for "Recording now" readiness signal. Stops via `kill(-pid, SIGINT)`. Has `resolveExecutable()` for PATH-based CLI lookup.
+- `Recorder.swift` — Orchestrates recording: starts AudioRecorder, stops it, sends WAV to TranscriptionClient, returns text.
+- `AudioRecorder.swift` — Native audio capture via AVAudioEngine. Records at 16kHz mono PCM, produces WAV data.
+- `TranscriptionClient.swift` — Sends WAV audio to WhisperKit server (localhost:50060) via multipart HTTP POST, parses JSON response.
 - `ImproveWriting.swift` — Calls LLM proxy (localhost:8317) directly via HTTP using OpenAI-compatible chat completions API. No external CLI dependency.
 - `TranscriptStore.swift` — In-memory store of transcript records (raw + improved text + error state), observable for SwiftUI.
 - `HistoryWindow.swift` — NSWindow hosting the SwiftUI History & Settings view, switches activation policy for proper window behavior.
 - `HistoryView.swift` — SwiftUI views: tabbed layout with TranscriptsTab (transcript cards with edit/copy/improve) and SettingsTab (dependency health checker, Launch at Login).
-- `DependencyChecker.swift` — ObservableObject that probes CLI tools (mictotext, ffmpeg, whisperkit-cli) and services (WhisperKit Server :50060, LLM proxy :8317) with async health checks.
+- `DependencyChecker.swift` — ObservableObject that probes services (WhisperKit Server :50060, LLM proxy :8317) with async health checks.
 - `Logger.swift` — Singleton file logger writing to `~/Library/Logs/micbar.log` with serial DispatchQueue for thread safety.
 
 ### Key details
