@@ -26,7 +26,7 @@ final class DependencyChecker: ObservableObject {
         isChecking = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let results = [self.checkMictotext(), self.checkImproveWriting()]
+            let results = [self.checkTranscription(), self.checkImproveWriting()]
             DispatchQueue.main.async {
                 self.results = results
                 self.isChecking = false
@@ -34,34 +34,13 @@ final class DependencyChecker: ObservableObject {
         }
     }
 
-    private func checkMictotext() -> DependencyStatus {
-        let resolved = MicToTextProcess.resolveExecutable("mictotext")
-        let ffmpeg = checkExecutable("ffmpeg")
-        let whisperkit = checkExecutable("whisperkit-cli")
-        let server = checkHTTP(name: "WhisperKit Server :50060", url: "http://localhost:50060/health")
-
-        return DependencyStatus(
-            name: "mictotext",
-            found: resolved != nil,
-            path: resolved,
-            error: resolved == nil ? "Not found on PATH" : nil,
-            children: [ffmpeg, whisperkit, server]
-        )
+    private func checkTranscription() -> DependencyStatus {
+        return checkHTTP(name: "WhisperKit Server :50060", url: "http://localhost:50060/health")
     }
 
     private func checkImproveWriting() -> DependencyStatus {
         let proxy = checkHTTP(name: "LLM proxy :8317", url: "http://localhost:8317/v1/models")
         return proxy
-    }
-
-    private func checkExecutable(_ name: String) -> DependencyStatus {
-        let resolved = MicToTextProcess.resolveExecutable(name)
-        return DependencyStatus(
-            name: name,
-            found: resolved != nil,
-            path: resolved,
-            error: resolved == nil ? "Not found on PATH" : nil
-        )
     }
 
     private func checkHTTP(name: String, url urlString: String) -> DependencyStatus {

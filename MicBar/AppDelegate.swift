@@ -167,7 +167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             log.info("start: ignored, state=\(state)")
             return
         }
-        log.info("start: launching mictotext")
+        log.info("start: beginning recording")
         recordStartTime = Date()
         popoverController.setRecordingStartTime(recordStartTime!)
 
@@ -181,8 +181,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self.showPopover()
             }
         } else {
-            log.warning("failed to start mictotext")
-            notify(title: "MicBar", body: "Failed to start mictotext")
+            log.warning("failed to start recording")
+            notify(title: "MicBar", body: "Failed to start recording")
         }
     }
 
