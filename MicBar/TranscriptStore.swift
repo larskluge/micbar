@@ -7,6 +7,8 @@ struct TranscriptRecord: Identifiable {
     var rawText: String
     var improvedText: String?
     var isImproving: Bool
+    var improveError: String?
+    var rawEdited: Bool = false
 }
 
 enum RecordingState {
@@ -17,13 +19,14 @@ class TranscriptStore: ObservableObject {
     @Published var records: [TranscriptRecord] = []
     @Published var recordingState: RecordingState = .idle
 
-    func addTranscript(raw: String, improved: String?) {
+    func addTranscript(raw: String, improved: String?, improveError: String? = nil) {
         let record = TranscriptRecord(
             id: UUID(),
             timestamp: Date(),
             rawText: raw,
             improvedText: improved,
-            isImproving: false
+            isImproving: false,
+            improveError: improveError
         )
         records.insert(record, at: 0)
     }
@@ -31,6 +34,7 @@ class TranscriptStore: ObservableObject {
     func updateRawText(id: UUID, text: String) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         records[idx].rawText = text
+        records[idx].rawEdited = true
     }
 
     func updateImprovedText(id: UUID, text: String) {
@@ -42,6 +46,8 @@ class TranscriptStore: ObservableObject {
     func improveTranscript(id: UUID) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         records[idx].isImproving = true
+        records[idx].improveError = nil
+        records[idx].rawEdited = false
         let raw = records[idx].rawText
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -49,8 +55,10 @@ class TranscriptStore: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self,
                       let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let improved = result {
+                if let improved = result.text {
                     self.records[idx].improvedText = improved
+                } else {
+                    self.records[idx].improveError = result.error
                 }
                 self.records[idx].isImproving = false
             }

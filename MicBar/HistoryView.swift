@@ -72,10 +72,12 @@ struct SettingsTab: View {
             Form {
                 DependenciesSection(checker: checker)
 
-                Toggle("Launch at Login", isOn: $loginEnabled)
-                    .onChange(of: loginEnabled) { newValue in
-                        toggleLogin(newValue)
-                    }
+                Section("General") {
+                    Toggle("Launch at Login", isOn: $loginEnabled)
+                        .onChange(of: loginEnabled) { newValue in
+                            toggleLogin(newValue)
+                        }
+                }
             }
             .formStyle(.grouped)
 
@@ -139,6 +141,14 @@ struct TranscriptCard: View {
             // Improved text or Improve button
             if record.improvedText != nil {
                 textBlock(label: "Improved", text: improvedBinding, copyValue: improvedBinding.wrappedValue)
+                if record.rawEdited {
+                    Button(action: { store.improveTranscript(id: record.id) }) {
+                        Text("Re-improve")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             } else if record.isImproving {
                 HStack(spacing: 6) {
                     ProgressView()
@@ -149,12 +159,21 @@ struct TranscriptCard: View {
                 }
                 .padding(.top, 2)
             } else {
-                Button(action: { store.improveTranscript(id: record.id) }) {
-                    Text("Improve")
-                        .font(.system(size: 11, weight: .medium))
+                HStack(spacing: 8) {
+                    Button(action: { store.improveTranscript(id: record.id) }) {
+                        Text("Improve")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    if let error = record.improveError {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundColor(.red)
+                            .lineLimit(2)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
         }
         .padding(14)

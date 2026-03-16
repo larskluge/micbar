@@ -207,11 +207,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
             let rawText = text
             var improveFailed = false
+            var improveError: String?
             if improve {
-                if let improved = self.improveWriting(text) {
+                let result = self.improveWriting(text)
+                if let improved = result.text {
                     text = improved
                 } else {
                     improveFailed = true
+                    improveError = result.error
                 }
             }
 
@@ -232,7 +235,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let improvedText = (improve && !improveFailed) ? text : nil
 
             DispatchQueue.main.async {
-                self.transcriptStore.addTranscript(raw: rawText, improved: improvedText)
+                self.transcriptStore.addTranscript(raw: rawText, improved: improvedText, improveError: improveError)
                 self.popover.performClose(nil)
                 self.notify(title: label, body: preview)
                 self.log.info("copied to clipboard, notified")
@@ -241,7 +244,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    private func improveWriting(_ text: String) -> String? {
+    private func improveWriting(_ text: String) -> ImproveResult {
         runImproveWriting(text, log: log)
     }
 

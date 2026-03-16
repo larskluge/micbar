@@ -1,7 +1,12 @@
 import Foundation
 
-/// Runs `improve-writing` CLI with the given text on stdin, returns improved text or nil on failure.
-func runImproveWriting(_ text: String, command: String = "improve-writing", log: Logger = .shared) -> String? {
+struct ImproveResult {
+    let text: String?
+    let error: String?
+}
+
+/// Runs `improve-writing` CLI with the given text on stdin, returns improved text or error details.
+func runImproveWriting(_ text: String, command: String = "improve-writing", log: Logger = .shared) -> ImproveResult {
     log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
     let startTime = Date()
 
@@ -44,13 +49,15 @@ func runImproveWriting(_ text: String, command: String = "improve-writing", log:
         log.info("improve-writing rc=\(proc.terminationStatus), took \(String(format: "%.1f", elapsed))s")
 
         let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        if let stderrStr = String(data: stderrData, encoding: .utf8), !stderrStr.isEmpty {
+        let stderrStr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !stderrStr.isEmpty {
             log.debug("improve-writing stderr: \(String(stderrStr.prefix(500)))")
         }
 
         if proc.terminationStatus != 0 {
+            let msg = stderrStr.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrStr
             log.warning("improve-writing failed with exit code \(proc.terminationStatus)")
-            return nil
+            return ImproveResult(text: nil, error: msg)
         }
 
         let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
@@ -58,12 +65,12 @@ func runImproveWriting(_ text: String, command: String = "improve-writing", log:
 
         if improved.isEmpty {
             log.warning("improve-writing returned empty output")
-            return nil
+            return ImproveResult(text: nil, error: "Returned empty output")
         }
         log.info("improve-writing output (\(improved.count) chars): \(String(improved.prefix(500)))")
-        return improved
+        return ImproveResult(text: improved, error: nil)
     } catch {
         log.warning("improve-writing error: \(error)")
-        return nil
+        return ImproveResult(text: nil, error: error.localizedDescription)
     }
 }
