@@ -1,130 +1,102 @@
 import XCTest
 import Foundation
 
-/// Mirrors the `runImproveWriting` logic from ImproveWriting.swift so we can test
-/// the subprocess handling: success, non-zero exit, empty output, command not found.
-private func runImproveWriting(_ text: String, command: String) -> String? {
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    proc.arguments = [command]
-
-    var environment = ProcessInfo.processInfo.environment
-    let homeBin = FileManager.default.homeDirectoryForCurrentUser.path + "/bin"
-    let extraPaths = [homeBin, "/opt/homebrew/bin", "/usr/local/bin"]
-    if let path = environment["PATH"] {
-        let missing = extraPaths.filter { !path.contains($0) }
-        if !missing.isEmpty {
-            environment["PATH"] = missing.joined(separator: ":") + ":" + path
-        }
+/// Parses an OpenAI-compatible chat completions JSON response, extracting the content.
+/// Mirrors the parsing logic in ImproveWriting.swift.
+private func parseCompletionResponse(_ data: Data) -> (text: String?, error: String?) {
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let choices = json["choices"] as? [[String: Any]],
+          let first = choices.first,
+          let message = first["message"] as? [String: Any],
+          let content = message["content"] as? String else {
+        return (nil, "Failed to parse LLM response")
     }
-    proc.environment = environment
-
-    let stdinPipe = Pipe()
-    let stdoutPipe = Pipe()
-    let stderrPipe = Pipe()
-    proc.standardInput = stdinPipe
-    proc.standardOutput = stdoutPipe
-    proc.standardError = stderrPipe
-
-    do {
-        try proc.run()
-        stdinPipe.fileHandleForWriting.write(text.data(using: .utf8) ?? Data())
-        stdinPipe.fileHandleForWriting.closeFile()
-
-        let timer = DispatchSource.makeTimerSource()
-        timer.schedule(deadline: .now() + 60)
-        timer.setEventHandler { [weak proc] in proc?.terminate() }
-        timer.resume()
-
-        proc.waitUntilExit()
-        timer.cancel()
-
-        if proc.terminationStatus != 0 {
-            return nil
-        }
-
-        let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let improved = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        if improved.isEmpty {
-            return nil
-        }
-        return improved
-    } catch {
-        return nil
+    let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+        return (nil, "LLM returned empty response")
     }
+    return (trimmed, nil)
+}
+
+/// Parses an OpenAI-compatible error JSON response.
+private func parseErrorResponse(_ data: Data) -> String? {
+    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let errorObj = json["error"] as? [String: Any],
+       let errorMsg = errorObj["message"] as? String {
+        return errorMsg
+    }
+    return nil
 }
 
 final class ImproveWritingTests: XCTestCase {
 
-    private var tempDir: URL!
+    // MARK: - Response parsing
 
-    override func setUp() {
-        super.setUp()
-        tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try! FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    func testParsesValidResponse() {
+        let json = """
+        {"choices":[{"message":{"content":"Improved text here."}}]}
+        """
+        let result = parseCompletionResponse(json.data(using: .utf8)!)
+        XCTAssertEqual(result.text, "Improved text here.")
+        XCTAssertNil(result.error)
     }
 
-    override func tearDown() {
-        try? FileManager.default.removeItem(at: tempDir)
-        super.tearDown()
+    func testTrimsWhitespaceFromContent() {
+        let json = """
+        {"choices":[{"message":{"content":"  trimmed  \\n"}}]}
+        """
+        let result = parseCompletionResponse(json.data(using: .utf8)!)
+        XCTAssertEqual(result.text, "trimmed")
     }
 
-    private func makeScript(contents: String) -> String {
-        let path = tempDir.appendingPathComponent("test-script").path
-        try! contents.write(toFile: path, atomically: true, encoding: .utf8)
-        chmod(path, 0o755)
-        return path
+    func testEmptyContentReturnsError() {
+        let json = """
+        {"choices":[{"message":{"content":"   "}}]}
+        """
+        let result = parseCompletionResponse(json.data(using: .utf8)!)
+        XCTAssertNil(result.text)
+        XCTAssertEqual(result.error, "LLM returned empty response")
     }
 
-    // MARK: - Success cases
-
-    func testSuccessReturnsImprovedText() {
-        let script = makeScript(contents: "#!/bin/bash\nread input\necho \"improved: $input\"")
-        let result = runImproveWriting("hello world", command: script)
-        XCTAssertEqual(result, "improved: hello world")
+    func testMalformedJsonReturnsError() {
+        let result = parseCompletionResponse("not json".data(using: .utf8)!)
+        XCTAssertNil(result.text)
+        XCTAssertEqual(result.error, "Failed to parse LLM response")
     }
 
-    func testStdinPassedToCommand() {
-        let script = makeScript(contents: "#!/bin/bash\ncat")
-        let result = runImproveWriting("the quick brown fox", command: script)
-        XCTAssertEqual(result, "the quick brown fox")
+    func testMissingChoicesReturnsError() {
+        let json = """
+        {"model":"test"}
+        """
+        let result = parseCompletionResponse(json.data(using: .utf8)!)
+        XCTAssertNil(result.text)
+        XCTAssertEqual(result.error, "Failed to parse LLM response")
     }
 
-    func testOutputIsTrimmed() {
-        let script = makeScript(contents: "#!/bin/bash\necho \"\"\necho \"  trimmed  \"\necho \"\"")
-        let result = runImproveWriting("hello", command: script)
-        XCTAssertEqual(result, "trimmed")
+    func testEmptyChoicesReturnsError() {
+        let json = """
+        {"choices":[]}
+        """
+        let result = parseCompletionResponse(json.data(using: .utf8)!)
+        XCTAssertNil(result.text)
+        XCTAssertEqual(result.error, "Failed to parse LLM response")
     }
 
-    // MARK: - Failure cases: must return nil (not raw text)
+    // MARK: - Error response parsing
 
-    func testNonZeroExitReturnsNil() {
-        let script = makeScript(contents: "#!/bin/bash\nexit 1")
-        let result = runImproveWriting("hello", command: script)
-        XCTAssertNil(result, "Non-zero exit must return nil, not fall back to raw text")
+    func testParsesErrorResponse() {
+        let json = """
+        {"error":{"message":"Rate limit exceeded","type":"rate_limit_error"}}
+        """
+        let msg = parseErrorResponse(json.data(using: .utf8)!)
+        XCTAssertEqual(msg, "Rate limit exceeded")
     }
 
-    func testCommandNotFoundReturnsNil() {
-        let result = runImproveWriting("hello", command: "nonexistent-command-\(UUID().uuidString)")
-        XCTAssertNil(result, "Missing command must return nil, not fall back to raw text")
-    }
-
-    func testEmptyOutputReturnsNil() {
-        let script = makeScript(contents: "#!/bin/bash\nexit 0")
-        let result = runImproveWriting("hello", command: script)
-        XCTAssertNil(result, "Empty output must return nil, not fall back to raw text")
-    }
-
-    func testWhitespaceOnlyOutputReturnsNil() {
-        let script = makeScript(contents: "#!/bin/bash\necho \"   \"")
-        let result = runImproveWriting("hello", command: script)
-        XCTAssertNil(result, "Whitespace-only output must return nil, not fall back to raw text")
-    }
-
-    func testNonZeroExitWithOutputReturnsNil() {
-        let script = makeScript(contents: "#!/bin/bash\necho \"some output\"\nexit 2")
-        let result = runImproveWriting("hello", command: script)
-        XCTAssertNil(result, "Non-zero exit must return nil even if there is stdout output")
+    func testReturnsNilForNonErrorResponse() {
+        let json = """
+        {"choices":[]}
+        """
+        let msg = parseErrorResponse(json.data(using: .utf8)!)
+        XCTAssertNil(msg)
     }
 }

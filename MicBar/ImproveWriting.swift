@@ -5,72 +5,118 @@ struct ImproveResult {
     let error: String?
 }
 
-/// Runs `improve-writing` CLI with the given text on stdin, returns improved text or error details.
-func runImproveWriting(_ text: String, command: String = "improve-writing", log: Logger = .shared) -> ImproveResult {
+private let llmProxyURL = "http://localhost:8317/v1/chat/completions"
+private let llmModel = "claude-sonnet-4-6"
+private let systemPrompt = """
+    You are a copy writer. Detect which language the user's input is in and always respond in the same language. \
+    Return ONLY the improved text, nothing else — no XML tags, no explanations, no preamble.
+
+    Write a slightly improved version of the user's input. Shorten sentences where it makes sense; \
+    do not do this aggressively. Do not change meaning.
+    """
+
+/// Calls the LLM proxy to improve the given text. Blocks the calling thread.
+func runImproveWriting(_ text: String, log: Logger = .shared) -> ImproveResult {
     log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
     let startTime = Date()
 
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    proc.arguments = [command]
-
-    var environment = ProcessInfo.processInfo.environment
-    let homeBin = FileManager.default.homeDirectoryForCurrentUser.path + "/bin"
-    let extraPaths = [homeBin, "/opt/homebrew/bin", "/usr/local/bin"]
-    if let path = environment["PATH"] {
-        let missing = extraPaths.filter { !path.contains($0) }
-        if !missing.isEmpty {
-            environment["PATH"] = missing.joined(separator: ":") + ":" + path
-        }
+    guard let url = URL(string: llmProxyURL) else {
+        return ImproveResult(text: nil, error: "Invalid LLM proxy URL")
     }
-    proc.environment = environment
 
-    let stdinPipe = Pipe()
-    let stdoutPipe = Pipe()
-    let stderrPipe = Pipe()
-    proc.standardInput = stdinPipe
-    proc.standardOutput = stdoutPipe
-    proc.standardError = stderrPipe
+    let body: [String: Any] = [
+        "model": llmModel,
+        "messages": [
+            ["role": "system", "content": systemPrompt],
+            ["role": "user", "content": text],
+        ],
+    ]
 
-    do {
-        try proc.run()
-        stdinPipe.fileHandleForWriting.write(text.data(using: .utf8) ?? Data())
-        stdinPipe.fileHandleForWriting.closeFile()
+    guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+        return ImproveResult(text: nil, error: "Failed to encode request")
+    }
 
-        let timer = DispatchSource.makeTimerSource()
-        timer.schedule(deadline: .now() + 60)
-        timer.setEventHandler { [weak proc] in proc?.terminate() }
-        timer.resume()
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = jsonData
+    request.timeoutInterval = 60
 
-        proc.waitUntilExit()
-        timer.cancel()
+    let semaphore = DispatchSemaphore(value: 0)
+    var result = ImproveResult(text: nil, error: "Timeout")
 
-        let elapsed = -startTime.timeIntervalSinceNow
-        log.info("improve-writing rc=\(proc.terminationStatus), took \(String(format: "%.1f", elapsed))s")
+    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let elapsed = String(format: "%.1f", -startTime.timeIntervalSinceNow)
 
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrStr = String(data: stderrData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !stderrStr.isEmpty {
-            log.debug("improve-writing stderr: \(String(stderrStr.prefix(500)))")
+        if let error = error {
+            let msg: String
+            let nsError = error as NSError
+            if nsError.code == NSURLErrorCannotConnectToHost ||
+               nsError.code == -1004 /* connection refused */ {
+                msg = "LLM proxy not running at localhost:8317"
+            } else {
+                msg = error.localizedDescription
+            }
+            log.warning("improve-writing failed in \(elapsed)s: \(msg)")
+            result = ImproveResult(text: nil, error: msg)
+            semaphore.signal()
+            return
         }
 
-        if proc.terminationStatus != 0 {
-            let msg = stderrStr.isEmpty ? "Exit code \(proc.terminationStatus)" : stderrStr
-            log.warning("improve-writing failed with exit code \(proc.terminationStatus)")
-            return ImproveResult(text: nil, error: msg)
+        guard let http = response as? HTTPURLResponse else {
+            log.warning("improve-writing: no HTTP response")
+            result = ImproveResult(text: nil, error: "No response from LLM proxy")
+            semaphore.signal()
+            return
         }
 
-        let outputData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let improved = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let data = data else {
+            log.warning("improve-writing: no data in response")
+            result = ImproveResult(text: nil, error: "Empty response from LLM proxy")
+            semaphore.signal()
+            return
+        }
 
+        guard (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            let msg = "LLM proxy returned HTTP \(http.statusCode)"
+            log.warning("improve-writing failed in \(elapsed)s: \(msg) — \(String(body.prefix(300)))")
+            // Try to extract error message from JSON response
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let errorObj = json["error"] as? [String: Any],
+               let errorMsg = errorObj["message"] as? String {
+                result = ImproveResult(text: nil, error: errorMsg)
+            } else {
+                result = ImproveResult(text: nil, error: msg)
+            }
+            semaphore.signal()
+            return
+        }
+
+        // Parse the OpenAI-compatible response
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let message = first["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            log.warning("improve-writing: failed to parse response")
+            result = ImproveResult(text: nil, error: "Failed to parse LLM response")
+            semaphore.signal()
+            return
+        }
+
+        let improved = content.trimmingCharacters(in: .whitespacesAndNewlines)
         if improved.isEmpty {
-            log.warning("improve-writing returned empty output")
-            return ImproveResult(text: nil, error: "Returned empty output")
+            log.warning("improve-writing: empty content in \(elapsed)s")
+            result = ImproveResult(text: nil, error: "LLM returned empty response")
+        } else {
+            log.info("improve-writing output (\(improved.count) chars) in \(elapsed)s: \(String(improved.prefix(500)))")
+            result = ImproveResult(text: improved, error: nil)
         }
-        log.info("improve-writing output (\(improved.count) chars): \(String(improved.prefix(500)))")
-        return ImproveResult(text: improved, error: nil)
-    } catch {
-        log.warning("improve-writing error: \(error)")
-        return ImproveResult(text: nil, error: error.localizedDescription)
+        semaphore.signal()
     }
+    task.resume()
+    _ = semaphore.wait(timeout: .now() + 65)
+
+    return result
 }

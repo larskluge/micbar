@@ -245,7 +245,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     }
 
     private func improveWriting(_ text: String) -> ImproveResult {
-        runImproveWriting(text, log: log)
+        runImproveWriting(text)
     }
 
     private func notify(title: String, body: String) {

@@ -50,16 +50,8 @@ final class DependencyChecker: ObservableObject {
     }
 
     private func checkImproveWriting() -> DependencyStatus {
-        let resolved = resolveWithHomeBin("improve-writing")
         let proxy = checkHTTP(name: "LLM proxy :8317", url: "http://localhost:8317/v1/models")
-
-        return DependencyStatus(
-            name: "improve-writing",
-            found: resolved != nil,
-            path: resolved,
-            error: resolved == nil ? "Not found on PATH" : nil,
-            children: [proxy]
-        )
+        return proxy
     }
 
     private func checkExecutable(_ name: String) -> DependencyStatus {
@@ -70,15 +62,6 @@ final class DependencyChecker: ObservableObject {
             path: resolved,
             error: resolved == nil ? "Not found on PATH" : nil
         )
-    }
-
-    private func resolveWithHomeBin(_ name: String) -> String? {
-        let homeBin = FileManager.default.homeDirectoryForCurrentUser.path + "/bin"
-        let full = "\(homeBin)/\(name)"
-        if FileManager.default.isExecutableFile(atPath: full) {
-            return full
-        }
-        return MicToTextProcess.resolveExecutable(name)
     }
 
     private func checkHTTP(name: String, url urlString: String) -> DependencyStatus {

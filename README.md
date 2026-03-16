@@ -8,7 +8,7 @@ Built with Swift and AppKit. No Xcode IDE required.
 
 - Swift toolchain (Xcode Command Line Tools)
 - [`mictotext`](https://github.com/larskluge/mictotext) on PATH — speech-to-text CLI (requires `ffmpeg`, `whisperkit-cli`, and a WhisperKit server on port 50060)
-- `improve-writing` on PATH or `~/bin` — text post-processing CLI (optional, uses LLM proxy on port 8317)
+- LLM proxy on port 8317 — OpenAI-compatible API for the "Improve" feature (optional)
 
 ## Building & Running
 
@@ -30,12 +30,12 @@ A microphone icon appears in the menu bar. Click it to open a popover with a rec
 
 - **Record** — starts `mictotext` in the background; icon shows a waiting state while initializing, then a red recording indicator
 - **Stop & Copy** — stops recording, copies transcription to clipboard
-- **Stop, Improve & Copy** — stops recording, pipes text through `improve-writing`, copies result to clipboard
+- **Stop, Improve & Copy** — stops recording, improves text via LLM, copies result to clipboard
 
 The popover also links to a **History & Settings** window where you can:
 
 - Browse and edit past transcriptions
-- Trigger improve-writing on previous transcripts
+- Improve previous transcripts via LLM
 - Check dependency health (CLI tools and service availability)
 - Toggle Launch at Login
 
