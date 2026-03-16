@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-class HistoryWindowController {
+class HistoryWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let store: TranscriptStore
     private let onRecord: () -> Void
@@ -15,6 +15,7 @@ class HistoryWindowController {
 
     func showWindow() {
         if let window = window {
+            NSApp.setActivationPolicy(.regular)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -40,10 +41,19 @@ class HistoryWindowController {
         window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .visible
+        window.delegate = self
         self.window = window
 
+        NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Delay slightly so the dock icon doesn't flash
+        DispatchQueue.main.async {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     private func ensureEditMenu() {

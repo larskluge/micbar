@@ -42,7 +42,8 @@ class RecordingPopoverController: NSViewController {
     func updateState(_ state: AppDelegateState) {
         currentState = state
         DispatchQueue.main.async { [weak self] in
-            self?.showState(state)
+            guard let self = self, self.isViewLoaded else { return }
+            self.showState(state)
         }
     }
 

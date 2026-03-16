@@ -9,7 +9,7 @@ struct HistoryView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            TranscriptsTab(store: store, onRecord: onRecord, onStop: onStop)
+            TranscriptsTab(store: store)
                 .tabItem { Label("History", systemImage: "clock") }
                 .tag(0)
 
@@ -17,14 +17,23 @@ struct HistoryView: View {
                 .tabItem { Label("Settings", systemImage: "gear") }
                 .tag(1)
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if selectedTab == 0 {
+                HStack {
+                    Spacer()
+                    RecordingControls(state: store.recordingState, onRecord: onRecord, onStop: onStop)
+                }
+                .padding(.trailing, 12)
+                .frame(height: 0)
+                .offset(y: -24)
+            }
+        }
         .frame(minWidth: 600, idealWidth: 900, minHeight: 500, idealHeight: 700)
     }
 }
 
 struct TranscriptsTab: View {
     @ObservedObject var store: TranscriptStore
-    var onRecord: () -> Void
-    var onStop: () -> Void
 
     private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -33,33 +42,22 @@ struct TranscriptsTab: View {
     }()
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
+        if store.records.isEmpty {
+            VStack {
                 Spacer()
-                RecordingControls(state: store.recordingState, onRecord: onRecord, onStop: onStop)
+                Text("No transcripts yet")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 14))
+                Spacer()
             }
-            .frame(height: 44)
-            .padding(.horizontal, 12)
-
-            Divider()
-
-            if store.records.isEmpty {
-                VStack {
-                    Spacer()
-                    Text("No transcripts yet")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 14))
-                    Spacer()
-                }
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(store.records) { record in
-                            TranscriptCard(record: record, store: store, formatter: timestampFormatter)
-                        }
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(store.records) { record in
+                        TranscriptCard(record: record, store: store, formatter: timestampFormatter)
                     }
-                    .padding(20)
                 }
+                .padding(20)
             }
         }
     }
@@ -315,36 +313,33 @@ struct RecordingControls: View {
         switch state {
         case .idle:
             Button(action: onRecord) {
-                Label("Record", systemImage: "mic.fill")
-                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color.red))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.regular)
+            .buttonStyle(.borderless)
 
         case .waiting:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Starting...")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-            }
+            ProgressView()
+                .controlSize(.small)
 
         case .recording:
             Button(action: onStop) {
-                Label("Stop", systemImage: "stop.fill")
-                    .font(.system(size: 13, weight: .medium))
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color.accentColor))
+                    .contentShape(Circle())
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            .buttonStyle(.borderless)
 
         case .processing:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Processing...")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-            }
+            ProgressView()
+                .controlSize(.small)
         }
     }
 }

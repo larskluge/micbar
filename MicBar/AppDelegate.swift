@@ -14,7 +14,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     let transcriptStore = TranscriptStore()
     private lazy var historyWindowController = HistoryWindowController(
         store: transcriptStore,
-        onRecord: { [weak self] in self?.startRecording() },
+        onRecord: { [weak self] in self?.startRecording(showPopover: false) },
         onStop: { [weak self] in self?.stopAndFinish(improve: false) }
     )
 
@@ -155,7 +155,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     // MARK: - Recording
 
-    private func startRecording() {
+    private func startRecording(showPopover: Bool = true) {
+        guard state == .idle else {
+            log.info("start: ignored, state=\(state)")
+            return
+        }
         log.info("start: launching mictotext")
         recordStartTime = Date()
         popoverController.setRecordingStartTime(recordStartTime!)
@@ -166,7 +170,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         if process.start() {
             state = .waiting
-            showPopover()
+            if showPopover {
+                self.showPopover()
+            }
         } else {
             log.warning("failed to start mictotext")
             notify(title: "MicBar", body: "Failed to start mictotext")
