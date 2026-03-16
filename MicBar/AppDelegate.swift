@@ -296,6 +296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
         default:
+            historyWindowController.showWindow()
             completionHandler()
         }
     }
