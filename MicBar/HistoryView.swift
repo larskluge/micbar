@@ -172,15 +172,14 @@ struct TranscriptCard: View {
                     .cornerRadius(4)
 
                 Button(action: { copyText(copyValue, field: label) }) {
-                    Label(
-                        copiedField == label ? "Copied!" : "Copy",
-                        systemImage: copiedField == label ? "checkmark" : "doc.on.doc"
-                    )
-                    .font(.system(size: 11))
-                    .foregroundColor(copiedField == label ? .green : .secondary)
+                    Image(systemName: copiedField == label ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 12))
+                        .foregroundColor(copiedField == label ? .green : .secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 6)
+                .padding(.top, 4)
                 .animation(.easeInOut(duration: 0.15), value: copiedField)
             }
         }
