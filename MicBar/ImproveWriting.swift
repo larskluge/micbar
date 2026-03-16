@@ -1,123 +1,155 @@
 import Foundation
 
-struct ImproveResult {
+struct ImproveResult: Equatable {
     let text: String?
     let error: String?
 }
 
-private let llmProxyURL = "http://localhost:8317/v1/chat/completions"
-private let llmModel = "claude-sonnet-4-6"
-private let systemPrompt = """
-    You are a copy writer. Detect which language the user's input is in and always respond in the same language. \
-    Return ONLY the improved text, nothing else — no XML tags, no explanations, no preamble.
+/// Abstraction over HTTP so we can inject a mock in tests.
+protocol HTTPClient {
+    func sendRequest(_ request: URLRequest, completion: @escaping (Data?, URLResponse?, Error?) -> Void)
+}
 
-    Write a slightly improved version of the user's input. Shorten sentences where it makes sense; \
-    do not do this aggressively. Do not change meaning.
-    """
-
-/// Calls the LLM proxy to improve the given text. Blocks the calling thread.
-func runImproveWriting(_ text: String, log: Logger = .shared) -> ImproveResult {
-    log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
-    let startTime = Date()
-
-    guard let url = URL(string: llmProxyURL) else {
-        return ImproveResult(text: nil, error: "Invalid LLM proxy URL")
+/// Default implementation using URLSession.
+struct URLSessionHTTPClient: HTTPClient {
+    func sendRequest(_ request: URLRequest, completion: @escaping (Data?, URLResponse?, Error?) -> Void) {
+        URLSession.shared.dataTask(with: request, completionHandler: completion).resume()
     }
+}
+
+/// Configuration for the improve-writing LLM call.
+struct ImproveWritingConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var systemPrompt: String = """
+        You are a copy writer. Detect which language the user's input is in and always respond in the same language. \
+        Return ONLY the improved text, nothing else — no XML tags, no explanations, no preamble.
+
+        Write a slightly improved version of the user's input. Shorten sentences where it makes sense; \
+        do not do this aggressively. Do not change meaning.
+        """
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+}
+
+// MARK: - Request building
+
+func buildImproveRequest(text: String, config: ImproveWritingConfig) -> URLRequest? {
+    guard let url = URL(string: config.url) else { return nil }
 
     let body: [String: Any] = [
-        "model": llmModel,
+        "model": config.model,
         "stream": false,
         "messages": [
-            ["role": "system", "content": systemPrompt],
+            ["role": "system", "content": config.systemPrompt],
             ["role": "user", "content": text],
         ],
     ]
 
-    guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
-        return ImproveResult(text: nil, error: "Failed to encode request")
-    }
+    guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else { return nil }
 
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.httpBody = jsonData
-    request.timeoutInterval = 60
+    request.timeoutInterval = config.timeoutSeconds
+    return request
+}
 
-    let semaphore = DispatchSemaphore(value: 0)
-    var result = ImproveResult(text: nil, error: "Timeout")
+// MARK: - Response parsing
 
-    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+func parseImproveResponse(data: Data?, response: URLResponse?, error: Error?) -> ImproveResult {
+    if let error = error {
+        let nsError = error as NSError
+        if nsError.code == NSURLErrorCannotConnectToHost || nsError.code == -1004 {
+            return ImproveResult(text: nil, error: "LLM proxy not running at localhost:8317")
+        }
+        return ImproveResult(text: nil, error: error.localizedDescription)
+    }
+
+    guard let http = response as? HTTPURLResponse else {
+        return ImproveResult(text: nil, error: "No response from LLM proxy")
+    }
+
+    guard let data = data else {
+        return ImproveResult(text: nil, error: "Empty response from LLM proxy")
+    }
+
+    guard (200...299).contains(http.statusCode) else {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let errorObj = json["error"] as? [String: Any],
+           let errorMsg = errorObj["message"] as? String {
+            return ImproveResult(text: nil, error: errorMsg)
+        }
+        return ImproveResult(text: nil, error: "LLM proxy returned HTTP \(http.statusCode)")
+    }
+
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let choices = json["choices"] as? [[String: Any]],
+          let first = choices.first,
+          let message = first["message"] as? [String: Any],
+          let content = message["content"] as? String else {
+        return ImproveResult(text: nil, error: "Failed to parse LLM response")
+    }
+
+    let improved = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    if improved.isEmpty {
+        return ImproveResult(text: nil, error: "LLM returned empty response")
+    }
+    return ImproveResult(text: improved, error: nil)
+}
+
+/// Whether a failed result is worth retrying (transient network/server errors).
+func isRetryableError(_ result: ImproveResult) -> Bool {
+    guard let error = result.error else { return false }
+    let retryablePatterns = ["unexpected EOF", "connection reset", "timed out",
+                             "HTTP 502", "HTTP 503", "HTTP 429"]
+    return retryablePatterns.contains(where: { error.localizedCaseInsensitiveContains($0) })
+}
+
+// MARK: - Public API
+
+/// Calls the LLM proxy to improve the given text. Blocks the calling thread.
+func runImproveWriting(
+    _ text: String,
+    config: ImproveWritingConfig = ImproveWritingConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
+    let startTime = Date()
+
+    guard let request = buildImproveRequest(text: text, config: config) else {
+        return ImproveResult(text: nil, error: "Failed to build request")
+    }
+
+    var lastResult = ImproveResult(text: nil, error: "Timeout")
+
+    for attempt in 1...(1 + config.maxRetries) {
+        let semaphore = DispatchSemaphore(value: 0)
+
+        client.sendRequest(request) { data, response, error in
+            lastResult = parseImproveResponse(data: data, response: response, error: error)
+            semaphore.signal()
+        }
+
+        _ = semaphore.wait(timeout: .now() + config.timeoutSeconds + 5)
+
         let elapsed = String(format: "%.1f", -startTime.timeIntervalSinceNow)
 
-        if let error = error {
-            let msg: String
-            let nsError = error as NSError
-            if nsError.code == NSURLErrorCannotConnectToHost ||
-               nsError.code == -1004 /* connection refused */ {
-                msg = "LLM proxy not running at localhost:8317"
-            } else {
-                msg = error.localizedDescription
-            }
-            log.warning("improve-writing failed in \(elapsed)s: \(msg)")
-            result = ImproveResult(text: nil, error: msg)
-            semaphore.signal()
-            return
+        if lastResult.text != nil {
+            log.info("improve-writing output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
+            return lastResult
         }
 
-        guard let http = response as? HTTPURLResponse else {
-            log.warning("improve-writing: no HTTP response")
-            result = ImproveResult(text: nil, error: "No response from LLM proxy")
-            semaphore.signal()
-            return
+        if isRetryableError(lastResult) && attempt <= config.maxRetries {
+            log.info("improve-writing attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
+            continue
         }
 
-        guard let data = data else {
-            log.warning("improve-writing: no data in response")
-            result = ImproveResult(text: nil, error: "Empty response from LLM proxy")
-            semaphore.signal()
-            return
-        }
-
-        guard (200...299).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? ""
-            let msg = "LLM proxy returned HTTP \(http.statusCode)"
-            log.warning("improve-writing failed in \(elapsed)s: \(msg) — \(String(body.prefix(300)))")
-            // Try to extract error message from JSON response
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let errorObj = json["error"] as? [String: Any],
-               let errorMsg = errorObj["message"] as? String {
-                result = ImproveResult(text: nil, error: errorMsg)
-            } else {
-                result = ImproveResult(text: nil, error: msg)
-            }
-            semaphore.signal()
-            return
-        }
-
-        // Parse the OpenAI-compatible response
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
-              let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
-            log.warning("improve-writing: failed to parse response")
-            result = ImproveResult(text: nil, error: "Failed to parse LLM response")
-            semaphore.signal()
-            return
-        }
-
-        let improved = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        if improved.isEmpty {
-            log.warning("improve-writing: empty content in \(elapsed)s")
-            result = ImproveResult(text: nil, error: "LLM returned empty response")
-        } else {
-            log.info("improve-writing output (\(improved.count) chars) in \(elapsed)s: \(String(improved.prefix(500)))")
-            result = ImproveResult(text: improved, error: nil)
-        }
-        semaphore.signal()
+        log.warning("improve-writing failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
+        return lastResult
     }
-    task.resume()
-    _ = semaphore.wait(timeout: .now() + 65)
 
-    return result
+    return lastResult
 }
