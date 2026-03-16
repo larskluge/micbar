@@ -54,7 +54,12 @@ struct TranscriptsTab: View {
             ScrollView {
                 LazyVStack(spacing: 12) {
                     ForEach(store.records) { record in
-                        TranscriptCard(record: record, store: store, formatter: timestampFormatter)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(timestampFormatter.string(from: record.timestamp))
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                            TranscriptCard(record: record, store: store)
+                        }
                     }
                 }
                 .padding(20)
@@ -111,7 +116,6 @@ struct SettingsTab: View {
 struct TranscriptCard: View {
     let record: TranscriptRecord
     @ObservedObject var store: TranscriptStore
-    let formatter: DateFormatter
     @State private var copiedField: String?
 
     private var rawBinding: Binding<String> {
@@ -130,11 +134,6 @@ struct TranscriptCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Timestamp
-            Text(formatter.string(from: record.timestamp))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(Color(nsColor: .tertiaryLabelColor))
-
             // Raw text
             textBlock(label: "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue)
 
