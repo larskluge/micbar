@@ -1,19 +1,21 @@
 # micbar
 
-macOS menu bar app for speech-to-text. Click to record, stop to get a transcription on your clipboard. Optionally pipe through a writing improver before copying.
+Native macOS menu bar app for speech-to-text. Click to record, stop to get a transcription on your clipboard. Optionally pipe through a writing improver before copying.
+
+Built with Swift and AppKit. No Xcode IDE required.
 
 ## Prerequisites
 
-- Python 3.14+
-- [`mictotext`](https://github.com/larskluge/mictotext) on PATH — speech-to-text CLI
-- `improve-writing` on PATH — text post-processing CLI (optional, for the "Improve" action)
+- Swift toolchain (Xcode Command Line Tools)
+- [`mictotext`](https://github.com/larskluge/mictotext) on PATH — speech-to-text CLI (requires `ffmpeg`, `whisperkit-cli`, and a WhisperKit server on port 50060)
+- `improve-writing` on PATH or `~/bin` — text post-processing CLI (optional, uses LLM proxy on port 8317)
 
-## Setup
+## Building & Running
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install rumps
+make build   # Build release .app bundle
+make run     # Build and open the app
+make clean   # Remove build artifacts
 ```
 
 ## Testing
@@ -24,36 +26,19 @@ swift test
 
 ## Usage
 
-### Run manually
+A microphone icon appears in the menu bar. Click it to open a popover with a record button.
 
-```bash
-make run
-```
+- **Record** — starts `mictotext` in the background; icon shows a waiting state while initializing, then a red recording indicator
+- **Stop & Copy** — stops recording, copies transcription to clipboard
+- **Stop, Improve & Copy** — stops recording, pipes text through `improve-writing`, copies result to clipboard
 
-A microphone icon appears in the menu bar. The menu has three actions:
+The popover also links to a **History & Settings** window where you can:
 
-- **Start Recording** — starts `mictotext` in the background, icon shows ⏳ while initializing then 🔴 when recording
-- **Stop -> Clipboard** — stops recording, copies transcription to clipboard
-- **Stop -> Improve -> Clipboard** — stops recording, pipes text through `improve-writing`, copies result to clipboard
+- Browse and edit past transcriptions
+- Trigger improve-writing on previous transcripts
+- Check dependency health (CLI tools and service availability)
+- Toggle Launch at Login
 
-### Install as a login service
+## Launch at Login
 
-The included launchd plist runs micbar automatically when you log in.
-
-```bash
-make install
-```
-
-This generates a plist from the template with your local paths, copies it to `~/Library/LaunchAgents/`, and loads it. The service starts on GUI login sessions (`Aqua`) and does not restart on exit.
-
-To stop and remove the service:
-
-```bash
-make uninstall
-```
-
-To reinstall (regenerates plist from template and reloads):
-
-```bash
-make reinstall
-```
+Managed via SMAppService (macOS 13+) from the Settings tab. No launchd plist needed.

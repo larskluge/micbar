@@ -28,8 +28,14 @@ Swift Package (Package.swift) producing an AppKit executable, wrapped into a .ap
 ### Source files (MicBar/)
 
 - `main.swift` — Entry point. Sets up NSApplication with accessory activation policy.
-- `AppDelegate.swift` — NSStatusBar menu bar UI, state machine (idle/waiting/recording/processing), menu item management, notifications via UNUserNotificationCenter, improve-writing subprocess, Launch at Login via SMAppService.
-- `MicToTextProcess.swift` — Manages the `mictotext` subprocess using `posix_spawnp` with `POSIX_SPAWN_SETPGROUP` (own process group). Monitors stderr on a background DispatchQueue for "Recording now" readiness signal. Stops via `kill(-pid, SIGINT)`.
+- `AppDelegate.swift` — NSStatusBar menu bar UI, state machine (idle/waiting/recording/processing), popover management, notifications via UNUserNotificationCenter, improve-writing subprocess, Launch at Login via SMAppService.
+- `RecordingPopover.swift` — NSViewController-based popover with idle (record button), recording (stop/improve buttons, timer), and processing states. AppKit layout, no SwiftUI.
+- `MicToTextProcess.swift` — Manages the `mictotext` subprocess using `posix_spawnp` with `POSIX_SPAWN_SETPGROUP` (own process group). Monitors stderr on a background DispatchQueue for "Recording now" readiness signal. Stops via `kill(-pid, SIGINT)`. Has `resolveExecutable()` for PATH-based CLI lookup.
+- `ImproveWriting.swift` — Runs `improve-writing` CLI via `Process`, augments PATH with `~/bin` and `/opt/homebrew/bin`.
+- `TranscriptStore.swift` — In-memory store of transcript records (raw + improved text), observable for SwiftUI.
+- `HistoryWindow.swift` — Floating NSPanel (KeyablePanel subclass) hosting the SwiftUI History & Settings view.
+- `HistoryView.swift` — SwiftUI views: tabbed layout with TranscriptsTab (transcript cards with edit/copy) and SettingsTab (dependency health checker, Launch at Login).
+- `DependencyChecker.swift` — ObservableObject that probes CLI tools (mictotext, ffmpeg, whisperkit-cli, improve-writing) and services (WhisperKit Server :50060, LLM proxy :8317) with async health checks.
 - `Logger.swift` — Singleton file logger writing to `~/Library/Logs/micbar.log` with serial DispatchQueue for thread safety.
 
 ### Key details
