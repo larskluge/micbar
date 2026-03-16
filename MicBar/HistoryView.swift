@@ -37,7 +37,9 @@ struct TranscriptsTab: View {
 
     private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "EEE HH:mm"
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        f.doesRelativeDateFormatting = true
         return f
     }()
 
@@ -58,6 +60,7 @@ struct TranscriptsTab: View {
                             Text(timestampFormatter.string(from: record.timestamp))
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                                .padding(.leading, 14)
                             TranscriptCard(record: record, store: store)
                         }
                     }
