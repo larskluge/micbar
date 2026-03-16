@@ -300,10 +300,19 @@ struct DependencyRow: View {
             Image(systemName: "circle.fill")
                 .font(.system(size: 6))
                 .foregroundColor(dep.found ? .green : .red)
+                .padding(.top, dep.description != nil && isParent ? -8 : 0)
 
-            Text(dep.name)
-                .font(.system(size: isParent ? 13 : 12, weight: isParent ? .medium : .regular))
-                .foregroundColor(isParent ? .primary : .secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(dep.name)
+                    .font(.system(size: isParent ? 13 : 12, weight: isParent ? .medium : .regular))
+                    .foregroundColor(isParent ? .primary : .secondary)
+
+                if let description = dep.description, isParent {
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                }
+            }
 
             if let path = dep.path {
                 Text(path)
