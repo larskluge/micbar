@@ -26,6 +26,7 @@ func runImproveWriting(_ text: String, log: Logger = .shared) -> ImproveResult {
 
     let body: [String: Any] = [
         "model": llmModel,
+        "stream": false,
         "messages": [
             ["role": "system", "content": systemPrompt],
             ["role": "user", "content": text],
