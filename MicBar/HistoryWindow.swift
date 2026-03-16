@@ -1,56 +1,48 @@
 import AppKit
 import SwiftUI
 
-private class KeyablePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
-}
-
 class HistoryWindowController {
-    private var panel: NSPanel?
+    private var window: NSWindow?
     private let store: TranscriptStore
+    private let onRecord: () -> Void
+    private let onStop: () -> Void
 
-    init(store: TranscriptStore) {
+    init(store: TranscriptStore, onRecord: @escaping () -> Void, onStop: @escaping () -> Void) {
         self.store = store
+        self.onRecord = onRecord
+        self.onStop = onStop
     }
 
     func showWindow() {
-        if let panel = panel {
-            panel.makeKeyAndOrderFront(nil)
+        if let window = window {
+            window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
 
         ensureEditMenu()
 
-        let hostingController = NSHostingController(rootView: HistoryView(store: store))
+        let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop))
 
         let width: CGFloat = 900
         let height: CGFloat = 700
 
-        let panel = KeyablePanel(
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),
-            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.title = "MicBar"
-        panel.contentViewController = hostingController
-        panel.isFloatingPanel = true
-        panel.level = .floating
-        panel.setContentSize(NSSize(width: width, height: height))
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let x = screenFrame.midX - width / 2
-            let y = screenFrame.midY - height / 2
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
-        panel.isReleasedWhenClosed = false
-        panel.titlebarAppearsTransparent = true
-        panel.titleVisibility = .visible
+        window.title = "MicBar"
+        window.contentViewController = hostingController
+        window.setContentSize(NSSize(width: width, height: height))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .visible
+        self.window = window
 
-        self.panel = panel
-        panel.makeKeyAndOrderFront(nil)
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 

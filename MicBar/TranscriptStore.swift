@@ -9,8 +9,13 @@ struct TranscriptRecord: Identifiable {
     var isImproving: Bool
 }
 
+enum RecordingState {
+    case idle, waiting, recording, processing
+}
+
 class TranscriptStore: ObservableObject {
     @Published var records: [TranscriptRecord] = []
+    @Published var recordingState: RecordingState = .idle
 
     func addTranscript(raw: String, improved: String?) {
         let record = TranscriptRecord(

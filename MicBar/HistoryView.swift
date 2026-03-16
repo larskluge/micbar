@@ -3,11 +3,13 @@ import ServiceManagement
 
 struct HistoryView: View {
     @ObservedObject var store: TranscriptStore
+    var onRecord: () -> Void
+    var onStop: () -> Void
     @State private var selectedTab = 0
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            TranscriptsTab(store: store)
+            TranscriptsTab(store: store, onRecord: onRecord, onStop: onStop)
                 .tabItem { Label("History", systemImage: "clock") }
                 .tag(0)
 
@@ -21,6 +23,8 @@ struct HistoryView: View {
 
 struct TranscriptsTab: View {
     @ObservedObject var store: TranscriptStore
+    var onRecord: () -> Void
+    var onStop: () -> Void
 
     private let timestampFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -29,22 +33,33 @@ struct TranscriptsTab: View {
     }()
 
     var body: some View {
-        if store.records.isEmpty {
-            VStack {
+        VStack(spacing: 0) {
+            HStack {
                 Spacer()
-                Text("No transcripts yet")
-                    .foregroundColor(.secondary)
-                    .font(.system(size: 14))
-                Spacer()
+                RecordingControls(state: store.recordingState, onRecord: onRecord, onStop: onStop)
             }
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(store.records) { record in
-                        TranscriptCard(record: record, store: store, formatter: timestampFormatter)
-                    }
+            .frame(height: 44)
+            .padding(.horizontal, 12)
+
+            Divider()
+
+            if store.records.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("No transcripts yet")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 14))
+                    Spacer()
                 }
-                .padding(20)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(store.records) { record in
+                            TranscriptCard(record: record, store: store, formatter: timestampFormatter)
+                        }
+                    }
+                    .padding(20)
+                }
             }
         }
     }
@@ -147,11 +162,11 @@ struct TranscriptCard: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 1)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
         )
     }
 
@@ -286,6 +301,49 @@ struct DependencyRow: View {
                     .font(.system(size: 11))
                     .foregroundColor(.red)
                     .lineLimit(1)
+            }
+        }
+    }
+}
+
+struct RecordingControls: View {
+    let state: RecordingState
+    var onRecord: () -> Void
+    var onStop: () -> Void
+
+    var body: some View {
+        switch state {
+        case .idle:
+            Button(action: onRecord) {
+                Label("Record", systemImage: "mic.fill")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .controlSize(.regular)
+
+        case .waiting:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Starting...")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+
+        case .recording:
+            Button(action: onStop) {
+                Label("Stop", systemImage: "stop.fill")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+
+        case .processing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Processing...")
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
             }
         }
     }

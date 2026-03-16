@@ -19,7 +19,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var activity: NSObjectProtocol?
 
     let transcriptStore = TranscriptStore()
-    private lazy var historyWindowController = HistoryWindowController(store: transcriptStore)
+    private lazy var historyWindowController = HistoryWindowController(
+        store: transcriptStore,
+        onRecord: { [weak self] in self?.startRecording() },
+        onStop: { [weak self] in self?.stopAndFinish(improve: false) }
+    )
 
 
     enum State {
@@ -118,6 +122,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             setIcon("icon_wait", template: true)
         }
         popoverController?.updateState(mapState(state))
+        switch state {
+        case .idle: transcriptStore.recordingState = .idle
+        case .waiting: transcriptStore.recordingState = .waiting
+        case .recording: transcriptStore.recordingState = .recording
+        case .processing: transcriptStore.recordingState = .processing
+        }
     }
 
     // MARK: - RecordingPopoverDelegate
