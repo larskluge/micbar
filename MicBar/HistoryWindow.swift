@@ -60,6 +60,15 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
         guard NSApp.mainMenu == nil || NSApp.mainMenu?.item(withTitle: "Edit") == nil else { return }
 
         let mainMenu = NSApp.mainMenu ?? NSMenu()
+
+        if mainMenu.item(withTitle: "File") == nil {
+            let fileItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+            let fileMenu = NSMenu(title: "File")
+            fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+            fileItem.submenu = fileMenu
+            mainMenu.addItem(fileItem)
+        }
+
         let editItem = NSMenuItem(title: "Edit", action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: "Edit")
 
