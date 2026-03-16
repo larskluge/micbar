@@ -12,6 +12,7 @@ build:
 	@echo "Built $(APP_BUNDLE)"
 
 run: build
+	-killall $(APP_NAME) 2>/dev/null; sleep 0.5
 	open $(APP_BUNDLE)
 
 clean:
