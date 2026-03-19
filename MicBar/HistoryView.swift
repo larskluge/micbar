@@ -197,10 +197,7 @@ struct TranscriptCard: View {
                 .textCase(.uppercase)
 
             HStack(alignment: .top, spacing: 8) {
-                TextEditor(text: text)
-                    .font(.system(size: 13))
-                    .frame(minHeight: 32, maxHeight: 100)
-                    .scrollContentBackground(.hidden)
+                AutoExpandingTextEditor(text: text)
                     .padding(4)
                     .background(Color(nsColor: .textBackgroundColor).opacity(0.15))
                     .cornerRadius(4)
@@ -371,5 +368,27 @@ struct RecordingControls: View {
             ProgressView()
                 .controlSize(.small)
         }
+    }
+}
+
+struct AutoExpandingTextEditor: View {
+    @Binding var text: String
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // Hidden Text that sizes naturally to drive the container height
+            Text(text.isEmpty ? " " : text)
+                .font(.system(size: 13))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 8)
+                .fixedSize(horizontal: false, vertical: true)
+                .opacity(0)
+
+            TextEditor(text: $text)
+                .font(.system(size: 13))
+                .scrollContentBackground(.hidden)
+                .scrollDisabled(true)
+        }
+        .frame(minHeight: 32)
     }
 }
