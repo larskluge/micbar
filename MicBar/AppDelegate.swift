@@ -189,8 +189,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private func cancelRecording() {
         log.info("cancel: discarding recording")
         recorder.forceKill()
-        popover.performClose(nil)
         state = .idle
+        popover.performClose(nil)
     }
 
     private func stopAndFinish(improve: Bool) {
