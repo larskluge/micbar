@@ -15,7 +15,12 @@ run: build
 	-killall $(APP_NAME) 2>/dev/null; sleep 0.5
 	open $(APP_BUNDLE)
 
+install: build
+	-killall $(APP_NAME) 2>/dev/null; sleep 0.5
+	cp -R $(APP_BUNDLE) /Applications/
+	open /Applications/$(APP_NAME).app
+
 clean:
 	rm -rf build .build
 
-.PHONY: build run clean
+.PHONY: build run clean install
