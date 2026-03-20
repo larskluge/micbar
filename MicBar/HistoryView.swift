@@ -371,24 +371,131 @@ struct RecordingControls: View {
     }
 }
 
-struct AutoExpandingTextEditor: View {
+class LinkHandlingTextView: NSTextView {
+    override func clicked(onLink link: Any, at charIndex: Int) {
+        let url: URL?
+        if let u = link as? URL {
+            url = u
+        } else if let s = link as? String {
+            url = URL(string: s)
+        } else {
+            url = nil
+        }
+        guard let url = url else { return }
+        let isBackground = NSApp.currentEvent?.modifierFlags.contains(.command) ?? false
+        if isBackground {
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = false
+            NSWorkspace.shared.open(url, configuration: config, completionHandler: nil)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+struct AutoExpandingTextEditor: NSViewRepresentable {
     @Binding var text: String
 
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Hidden Text that sizes naturally to drive the container height
-            Text(text.isEmpty ? " " : text)
-                .font(.system(size: 13))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 8)
-                .fixedSize(horizontal: false, vertical: true)
-                .opacity(0)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
 
-            TextEditor(text: $text)
-                .font(.system(size: 13))
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(true)
+    func makeNSView(context: Context) -> AutoExpandingScrollView {
+        let textView = LinkHandlingTextView()
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.isRichText = false
+        textView.isAutomaticLinkDetectionEnabled = true
+        textView.font = NSFont.systemFont(ofSize: 13)
+        textView.textColor = NSColor.labelColor
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 4, height: 6)
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 2
+        textView.delegate = context.coordinator
+        textView.allowsUndo = true
+        // Enable link clicking in editable text views
+        textView.isAutomaticDataDetectionEnabled = true
+
+        let scrollView = AutoExpandingScrollView()
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.documentView = textView
+        scrollView.autoresizingMask = [.width]
+
+        context.coordinator.textView = textView
+        context.coordinator.scrollView = scrollView
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: AutoExpandingScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? LinkHandlingTextView else { return }
+        if textView.string != text {
+            let selectedRanges = textView.selectedRanges
+            textView.string = text
+            textView.selectedRanges = selectedRanges
+            textView.checkTextInDocument(nil) // re-detect links
         }
-        .frame(minHeight: 32)
+        context.coordinator.updateHeight()
+    }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: AutoExpandingTextEditor
+        weak var textView: LinkHandlingTextView?
+        weak var scrollView: NSScrollView?
+
+        init(_ parent: AutoExpandingTextEditor) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = textView else { return }
+            parent.text = textView.string
+            updateHeight()
+        }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            // Delegate to our custom NSTextView subclass
+            textView.clicked(onLink: link, at: charIndex)
+            return true
+        }
+
+        func updateHeight() {
+            guard let textView = textView, let scrollView = scrollView else { return }
+            guard let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer else { return }
+            layoutManager.ensureLayout(for: textContainer)
+            let contentSize = layoutManager.usedRect(for: textContainer).size
+            let height = max(32, contentSize.height + textView.textContainerInset.height * 2)
+            let frameHeight = scrollView.frame.height
+            if abs(frameHeight - height) > 0.5 {
+                scrollView.invalidateIntrinsicContentSize()
+                scrollView.frame.size.height = height
+                (scrollView.documentView as? NSTextView)?.frame.size.height = height
+                // Trigger SwiftUI layout update
+                DispatchQueue.main.async {
+                    scrollView.invalidateIntrinsicContentSize()
+                }
+            }
+        }
+    }
+}
+
+class AutoExpandingScrollView: NSScrollView {
+    override var intrinsicContentSize: NSSize {
+        guard let textView = documentView as? NSTextView,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return NSSize(width: NSView.noIntrinsicMetric, height: 32)
+        }
+        layoutManager.ensureLayout(for: textContainer)
+        let contentSize = layoutManager.usedRect(for: textContainer).size
+        let height = max(32, contentSize.height + textView.textContainerInset.height * 2)
+        return NSSize(width: NSView.noIntrinsicMetric, height: height)
     }
 }
