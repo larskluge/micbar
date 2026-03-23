@@ -1,10 +1,12 @@
 import AppKit
 import UserNotifications
 
-class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, RecordingPopoverDelegate, NSPopoverDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, RecordingPopoverDelegate, AnswerPopoverDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var popoverController: RecordingPopoverController!
+    private let answerPopover = NSPopover()
+    private var answerPopoverController: AnswerPopoverController!
 
     private let recorder = Recorder()
     private let log = Logger.shared
@@ -15,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private lazy var historyWindowController = HistoryWindowController(
         store: transcriptStore,
         onRecord: { [weak self] in self?.startRecording(showPopover: false) },
-        onStop: { [weak self] in self?.stopAndFinish(improve: false) }
+        onStop: { [weak self] in self?.stopAndFinish(mode: .copy) }
     )
 
     enum State {
@@ -66,6 +68,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover.behavior = .transient
         popover.animates = true
         popover.delegate = self
+
+        answerPopoverController = AnswerPopoverController()
+        answerPopoverController.delegate = self
+        answerPopoverController.onSizeChange = { [weak self] size in
+            self?.answerPopover.contentSize = size
+        }
+        answerPopover.contentViewController = answerPopoverController
+        answerPopover.behavior = .transient
+        answerPopover.animates = true
 
         if let button = statusItem.button {
             button.action = #selector(statusItemClicked)
@@ -149,11 +160,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - RecordingPopoverDelegate
 
     func popoverDidRequestStopCopy() {
-        stopAndFinish(improve: false)
+        stopAndFinish(mode: .copy)
     }
 
     func popoverDidRequestStopImprove() {
-        stopAndFinish(improve: true)
+        stopAndFinish(mode: .improve)
+    }
+
+    func popoverDidRequestStopAnswer() {
+        stopAndAnswer()
     }
 
     func popoverDidRequestCancel() {
@@ -193,9 +208,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover.performClose(nil)
     }
 
-    private func stopAndFinish(improve: Bool) {
+    private enum FinishMode {
+        case copy, improve, answer
+    }
+
+    private func stopAndFinish(mode: FinishMode) {
         state = .processing
-        log.info("stop called (improve=\(improve))")
+        log.info("stop called (mode=\(mode))")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -213,15 +232,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
             let rawText = text
-            var improveFailed = false
-            var improveError: String?
-            if improve {
-                let result = self.improveWriting(text)
+            var llmFailed = false
+            var llmError: String?
+            var improvedText: String?
+            var answerText: String?
+
+            switch mode {
+            case .copy:
+                break
+            case .improve:
+                let result = runImproveWriting(text)
                 if let improved = result.text {
                     text = improved
+                    improvedText = improved
                 } else {
-                    improveFailed = true
-                    improveError = result.error
+                    llmFailed = true
+                    llmError = result.error
+                }
+            case .answer:
+                let result = runAnswerQuestion(text)
+                if let answer = result.text {
+                    text = answer
+                    answerText = answer
+                } else {
+                    llmFailed = true
+                    llmError = result.error
                 }
             }
 
@@ -231,18 +266,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
             let preview = text.count > 80 ? String(text.prefix(80)) + "..." : text
             let label: String
-            if improveFailed {
-                label = "Improve failed — raw transcript copied"
-            } else if improve {
-                label = "Improved & copied to clipboard"
+            if llmFailed {
+                switch mode {
+                case .improve: label = "Improve failed — raw transcript copied"
+                case .answer: label = "Answer failed — raw transcript copied"
+                case .copy: label = "Copied to clipboard"
+                }
             } else {
-                label = "Copied to clipboard"
+                switch mode {
+                case .copy: label = "Copied to clipboard"
+                case .improve: label = "Improved & copied to clipboard"
+                case .answer: label = "Answer copied to clipboard"
+                }
             }
 
-            let improvedText = (improve && !improveFailed) ? text : nil
-
             DispatchQueue.main.async {
-                self.transcriptStore.addTranscript(raw: rawText, improved: improvedText, improveError: improveError)
+                self.transcriptStore.addTranscript(
+                    raw: rawText, improved: improvedText,
+                    improveError: mode == .improve ? llmError : nil,
+                    answer: answerText,
+                    answerError: mode == .answer ? llmError : nil
+                )
                 self.popover.performClose(nil)
                 self.notify(title: label, body: preview)
                 self.log.info("copied to clipboard, notified")
@@ -251,8 +295,62 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    private func improveWriting(_ text: String) -> ImproveResult {
-        runImproveWriting(text)
+    private func stopAndAnswer() {
+        state = .processing
+        log.info("stop called (mode=answer)")
+
+        // Close recording popover, open answer popover with spinner
+        popover.performClose(nil)
+        showAnswerPopover()
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+
+            let duration = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
+            self.log.info("recorded \(String(format: "%.1f", duration))s by wall clock")
+
+            guard let rawText = self.recorder.stop(), !rawText.isEmpty else {
+                self.log.warning("no text from transcription")
+                DispatchQueue.main.async {
+                    self.answerPopover.performClose(nil)
+                    self.notify(title: "Recording", body: "No speech detected")
+                    self.state = .idle
+                }
+                return
+            }
+
+            let result = runAnswerQuestion(rawText)
+
+            DispatchQueue.main.async {
+                self.transcriptStore.addTranscript(
+                    raw: rawText, improved: nil,
+                    answer: result.text,
+                    answerError: result.error
+                )
+
+                if let answer = result.text {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(answer, forType: .string)
+                }
+
+                self.answerPopoverController.showAnswer(text: result.text ?? "", error: result.error)
+                self.state = .idle
+            }
+        }
+    }
+
+    private func showAnswerPopover() {
+        guard let button = statusItem.button else { return }
+        answerPopoverController.showSpinner()
+        answerPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        NSApp.activate(ignoringOtherApps: true)
+        answerPopover.contentViewController?.view.window?.makeKey()
+    }
+
+    // MARK: - AnswerPopoverDelegate
+
+    func answerPopoverDidRequestClose() {
+        answerPopover.performClose(nil)
     }
 
     private func notify(title: String, body: String) {
@@ -280,6 +378,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     func popoverShouldClose(_ popover: NSPopover) -> Bool {
         // Don't allow click-outside dismissal while recording or waiting
+        // Allow closing when idle (answered state sets idle), or processing
         return state == .idle || state == .processing
     }
 

@@ -32,6 +32,18 @@ struct ImproveWritingConfig {
     var maxRetries: Int = 2
 }
 
+/// Configuration for the answer-question LLM call.
+struct AnswerQuestionConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var systemPrompt: String = """
+        You are a helpful assistant. Detect which language the user's input is in and always respond in the same language. \
+        The user has spoken a question or request via voice transcription. Answer it concisely and directly.
+        """
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+}
+
 // MARK: - Request building
 
 func buildImproveRequest(text: String, config: ImproveWritingConfig) -> URLRequest? {
@@ -116,10 +128,55 @@ func runImproveWriting(
     client: HTTPClient = URLSessionHTTPClient(),
     log: Logger = .shared
 ) -> ImproveResult {
-    log.info("improve-writing input (\(text.count) chars): \(String(text.prefix(500)))")
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "improve-writing", config: llmConfig, client: client, log: log)
+}
+
+/// Calls the LLM proxy to answer a question from the transcription. Blocks the calling thread.
+func runAnswerQuestion(
+    _ text: String,
+    config: AnswerQuestionConfig = AnswerQuestionConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "answer-question", config: llmConfig, client: client, log: log)
+}
+
+/// Internal shared config for LLM calls.
+private struct LLMCallConfig {
+    var url: String
+    var model: String
+    var systemPrompt: String
+    var timeoutSeconds: TimeInterval
+    var maxRetries: Int
+}
+
+/// Shared implementation for LLM calls. Blocks the calling thread.
+private func runLLMCall(
+    _ text: String,
+    label: String,
+    config: LLMCallConfig,
+    client: HTTPClient,
+    log: Logger
+) -> ImproveResult {
+    log.info("\(label) input (\(text.count) chars): \(String(text.prefix(500)))")
     let startTime = Date()
 
-    guard let request = buildImproveRequest(text: text, config: config) else {
+    let improveConfig = ImproveWritingConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    guard let request = buildImproveRequest(text: text, config: improveConfig) else {
         return ImproveResult(text: nil, error: "Failed to build request")
     }
 
@@ -138,16 +195,16 @@ func runImproveWriting(
         let elapsed = String(format: "%.1f", -startTime.timeIntervalSinceNow)
 
         if lastResult.text != nil {
-            log.info("improve-writing output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
+            log.info("\(label) output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
             return lastResult
         }
 
         if isRetryableError(lastResult) && attempt <= config.maxRetries {
-            log.info("improve-writing attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
+            log.info("\(label) attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
             continue
         }
 
-        log.warning("improve-writing failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
+        log.warning("\(label) failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
         return lastResult
     }
 

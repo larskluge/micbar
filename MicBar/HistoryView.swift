@@ -135,6 +135,13 @@ struct TranscriptCard: View {
         )
     }
 
+    private var answerBinding: Binding<String> {
+        Binding(
+            get: { store.records.first(where: { $0.id == record.id })?.answerText ?? "" },
+            set: { store.updateAnswerText(id: record.id, text: $0) }
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Raw text
@@ -160,16 +167,51 @@ struct TranscriptCard: View {
                         .foregroundColor(.secondary)
                 }
                 .padding(.top, 2)
-            } else {
+            }
+
+            // Answer text or Answer button
+            if record.answerText != nil {
+                textBlock(label: "Answer", text: answerBinding, copyValue: answerBinding.wrappedValue)
+            } else if record.isAnswering {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Answering...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 2)
+            }
+
+            // Action buttons row
+            if !record.isImproving && !record.isAnswering {
                 HStack(spacing: 8) {
-                    Button(action: { store.improveTranscript(id: record.id) }) {
-                        Text("Improve")
-                            .font(.system(size: 11, weight: .medium))
+                    if record.improvedText == nil {
+                        Button(action: { store.improveTranscript(id: record.id) }) {
+                            Text("Improve")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+
+                    if record.answerText == nil {
+                        Button(action: { store.answerQuestion(id: record.id) }) {
+                            Text("Answer")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
 
                     if let error = record.improveError {
+                        Text(error)
+                            .font(.system(size: 11))
+                            .foregroundColor(.red)
+                            .lineLimit(2)
+                    }
+
+                    if let error = record.answerError {
                         Text(error)
                             .font(.system(size: 11))
                             .foregroundColor(.red)

@@ -4,6 +4,7 @@ import QuartzCore
 protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopCopy()
     func popoverDidRequestStopImprove()
+    func popoverDidRequestStopAnswer()
     func popoverDidRequestCancel()
 }
 
@@ -95,9 +96,8 @@ class RecordingPopoverController: NSViewController {
         let statusH: CGFloat = 20
         let statusGap: CGFloat = 10
         let cancelH: CGFloat = 16
-        let hintH: CGFloat = 14
-        let hintGap: CGFloat = 4
-        let totalH: CGFloat = pad + cancelH + hintGap + hintH + btnGap + btnH + btnGap + btnH + statusGap + statusH + pad
+        let cancelGap: CGFloat = 4
+        let totalH: CGFloat = pad + cancelH + cancelGap + btnH + btnGap + btnH + btnGap + btnH + statusGap + statusH + pad
 
         recordingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         recordingView.wantsLayer = true
@@ -117,17 +117,18 @@ class RecordingPopoverController: NSViewController {
         cancelButton.target = self
         cancelButton.action = #selector(cancelClicked)
         cancelButton.keyEquivalent = "\u{1b}"
-        y += cancelH + hintGap
+        y += cancelH + cancelGap
 
-        // Keyboard hints line
-        let hintsLabel = NSTextField(labelWithString: "\u{21A9} Stop & Copy     \u{2318}I Improve     Esc Cancel")
-        hintsLabel.frame = NSRect(x: 0, y: y, width: W, height: hintH)
-        hintsLabel.font = .systemFont(ofSize: 10)
-        hintsLabel.textColor = .quaternaryLabelColor
-        hintsLabel.alignment = .center
-        y += hintH + btnGap
+        // Answer button
+        let stopAnswerButton = makeButton(
+            title: "Answer",
+            action: #selector(stopAnswerClicked),
+            isPrimary: false
+        )
+        stopAnswerButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
+        y += btnH + btnGap
 
-        // Secondary button
+        // Improve button
         let stopImproveButton = makeButton(
             title: "Stop, Improve & Copy",
             action: #selector(stopImproveClicked),
@@ -190,7 +191,7 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(timerLabel)
         recordingView.addSubview(stopCopyButton)
         recordingView.addSubview(stopImproveButton)
-        recordingView.addSubview(hintsLabel)
+        recordingView.addSubview(stopAnswerButton)
         recordingView.addSubview(cancelLabel)
         recordingView.addSubview(cancelButton)
 
@@ -232,7 +233,6 @@ class RecordingPopoverController: NSViewController {
         button.font = .systemFont(ofSize: 13, weight: isPrimary ? .semibold : .regular)
 
         if isPrimary {
-            button.keyEquivalent = "\r"
             button.contentTintColor = .white
             button.bezelColor = .controlAccentColor
         }
@@ -305,6 +305,10 @@ class RecordingPopoverController: NSViewController {
 
     @objc private func stopImproveClicked() {
         delegate?.popoverDidRequestStopImprove()
+    }
+
+    @objc private func stopAnswerClicked() {
+        delegate?.popoverDidRequestStopAnswer()
     }
 
     @objc private func cancelClicked() {
