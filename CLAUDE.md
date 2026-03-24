@@ -10,9 +10,11 @@ micbar is a native macOS menu bar app (Swift, AppKit) that records audio nativel
 
 ```bash
 make build   # Build release .app bundle
-make run     # Build and open the app
+make install # Build and copy .app to /Applications
 make clean   # Remove build artifacts
 ```
+
+**IMPORTANT:** Always use `make install` to build and deploy to `/Applications/MicBar.app`. Never run the app from the build directory — only ever open `/Applications/MicBar.app`. This avoids duplicate instances.
 
 Requires Swift toolchain (Xcode Command Line Tools). No Xcode IDE needed.
 
