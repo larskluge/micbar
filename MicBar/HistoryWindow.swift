@@ -13,8 +13,13 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
         self.onStop = onStop
     }
 
-    func showWindow() {
+    func showWindow(tab: Int = 0) {
         if let window = window {
+            if tab != 0 {
+                // Recreate content to switch tab
+                let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, initialTab: tab))
+                window.contentViewController = hostingController
+            }
             NSApp.setActivationPolicy(.regular)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -23,7 +28,7 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
 
         ensureEditMenu()
 
-        let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop))
+        let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, initialTab: tab))
 
         let width: CGFloat = 900
         let height: CGFloat = 700

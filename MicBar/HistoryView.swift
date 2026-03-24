@@ -5,7 +5,14 @@ struct HistoryView: View {
     @ObservedObject var store: TranscriptStore
     var onRecord: () -> Void
     var onStop: () -> Void
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
+
+    init(store: TranscriptStore, onRecord: @escaping () -> Void, onStop: @escaping () -> Void, initialTab: Int = 0) {
+        self.store = store
+        self.onRecord = onRecord
+        self.onStop = onStop
+        self._selectedTab = State(initialValue: initialTab)
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {

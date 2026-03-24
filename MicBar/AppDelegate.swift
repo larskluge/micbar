@@ -175,6 +175,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         cancelRecording()
     }
 
+    func popoverDidRequestOpenSettings() {
+        cancelRecording()
+        historyWindowController.showWindow(tab: 1)
+    }
+
     // MARK: - Recording
 
     private func startRecording(showPopover: Bool = true) {
