@@ -6,7 +6,7 @@ protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopImprove()
     func popoverDidRequestStopAnswer()
     func popoverDidRequestCancel()
-    func popoverDidRequestOpenSettings()
+    func popoverDidRequestOpenHistory()
 }
 
 class RecordingPopoverController: NSViewController {
@@ -180,15 +180,16 @@ class RecordingPopoverController: NSViewController {
         recordingLabel.font = .systemFont(ofSize: 13, weight: .medium)
         recordingLabel.textColor = .labelColor
 
+        // History button — far right, nudged up to optically align with text
+        let iconW: CGFloat = 18
+        let settingsButton = makeSettingsButton()
+        settingsButton.frame = NSRect(x: W - pad - iconW, y: y + 2, width: iconW, height: statusH)
+
         timerLabel = NSTextField(labelWithString: "0:00")
-        timerLabel.frame = NSRect(x: W - pad - 80, y: y, width: 80, height: statusH)
+        timerLabel.frame = NSRect(x: W - pad - iconW - 8 - 50, y: y, width: 50, height: statusH)
         timerLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         timerLabel.textColor = .secondaryLabelColor
         timerLabel.alignment = .right
-
-        // Settings gear button (top-right)
-        let settingsButton = makeSettingsButton()
-        settingsButton.frame = NSRect(x: W - pad - 20, y: totalH - pad - 20, width: 20, height: 20)
 
         recordingView.addSubview(redDotGlow)
         recordingView.addSubview(redDot)
@@ -255,7 +256,7 @@ class RecordingPopoverController: NSViewController {
         let button = NSButton(frame: .zero)
         button.bezelStyle = .inline
         button.isBordered = false
-        button.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
+        button.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "History")
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = .secondaryLabelColor
         button.target = self
@@ -339,6 +340,6 @@ class RecordingPopoverController: NSViewController {
     }
 
     @objc private func settingsClicked() {
-        delegate?.popoverDidRequestOpenSettings()
+        delegate?.popoverDidRequestOpenHistory()
     }
 }

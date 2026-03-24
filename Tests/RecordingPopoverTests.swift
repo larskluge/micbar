@@ -6,7 +6,7 @@ private protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopCopy()
     func popoverDidRequestStopImprove()
     func popoverDidRequestCancel()
-    func popoverDidRequestOpenSettings()
+    func popoverDidRequestOpenHistory()
 }
 
 // MARK: - Mock delegate to verify delegate calls
@@ -15,27 +15,27 @@ private class MockPopoverDelegate: RecordingPopoverDelegate {
     var stopCopyCalled = false
     var stopImproveCalled = false
     var cancelCalled = false
-    var openSettingsCalled = false
+    var openHistoryCalled = false
 
     func popoverDidRequestStopCopy() { stopCopyCalled = true }
     func popoverDidRequestStopImprove() { stopImproveCalled = true }
     func popoverDidRequestCancel() { cancelCalled = true }
-    func popoverDidRequestOpenSettings() { openSettingsCalled = true }
+    func popoverDidRequestOpenHistory() { openHistoryCalled = true }
 }
 
 // MARK: - Tests
 
 final class RecordingPopoverDelegateTests: XCTestCase {
 
-    func testDelegateProtocolIncludesOpenSettings() {
+    func testDelegateProtocolIncludesOpenHistory() {
         let delegate = MockPopoverDelegate()
-        delegate.popoverDidRequestOpenSettings()
-        XCTAssertTrue(delegate.openSettingsCalled)
+        delegate.popoverDidRequestOpenHistory()
+        XCTAssertTrue(delegate.openHistoryCalled)
     }
 
-    func testOpenSettingsDoesNotTriggerOtherActions() {
+    func testOpenHistoryDoesNotTriggerOtherActions() {
         let delegate = MockPopoverDelegate()
-        delegate.popoverDidRequestOpenSettings()
+        delegate.popoverDidRequestOpenHistory()
         XCTAssertFalse(delegate.stopCopyCalled)
         XCTAssertFalse(delegate.stopImproveCalled)
         XCTAssertFalse(delegate.cancelCalled)
@@ -46,30 +46,30 @@ final class RecordingPopoverDelegateTests: XCTestCase {
         delegate.popoverDidRequestStopCopy()
         delegate.popoverDidRequestStopImprove()
         delegate.popoverDidRequestCancel()
-        delegate.popoverDidRequestOpenSettings()
+        delegate.popoverDidRequestOpenHistory()
         XCTAssertTrue(delegate.stopCopyCalled)
         XCTAssertTrue(delegate.stopImproveCalled)
         XCTAssertTrue(delegate.cancelCalled)
-        XCTAssertTrue(delegate.openSettingsCalled)
+        XCTAssertTrue(delegate.openHistoryCalled)
     }
 }
 
-// MARK: - Settings action behavior tests
+// MARK: - History action behavior tests
 
-/// Tests that verify the expected behavior when the settings button is clicked:
+/// Tests that verify the expected behavior when the history button is clicked:
 /// 1. Recording should be cancelled (delegate.cancel called)
-/// 2. Settings window should be opened (delegate.openSettings called)
+/// 2. History window should be opened (delegate.openHistory called)
 ///
-/// We simulate the AppDelegate's popoverDidRequestOpenSettings() logic here
+/// We simulate the AppDelegate's popoverDidRequestOpenHistory() logic here
 /// since we can't import the executable target.
 
 private class MockAppDelegateBehavior {
     var cancelRecordingCalled = false
     var showWindowTab: Int?
 
-    func popoverDidRequestOpenSettings() {
+    func popoverDidRequestOpenHistory() {
         cancelRecording()
-        showWindow(tab: 1)
+        showWindow(tab: 0)
     }
 
     private func cancelRecording() {
@@ -81,17 +81,17 @@ private class MockAppDelegateBehavior {
     }
 }
 
-final class SettingsButtonBehaviorTests: XCTestCase {
+final class HistoryButtonBehaviorTests: XCTestCase {
 
-    func testOpenSettingsCancelsRecording() {
+    func testOpenHistoryCancelsRecording() {
         let mock = MockAppDelegateBehavior()
-        mock.popoverDidRequestOpenSettings()
+        mock.popoverDidRequestOpenHistory()
         XCTAssertTrue(mock.cancelRecordingCalled)
     }
 
-    func testOpenSettingsShowsSettingsTab() {
+    func testOpenHistoryShowsHistoryTab() {
         let mock = MockAppDelegateBehavior()
-        mock.popoverDidRequestOpenSettings()
-        XCTAssertEqual(mock.showWindowTab, 1)
+        mock.popoverDidRequestOpenHistory()
+        XCTAssertEqual(mock.showWindowTab, 0)
     }
 }
