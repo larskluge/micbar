@@ -5,6 +5,7 @@ protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopCopy()
     func popoverDidRequestStopImprove()
     func popoverDidRequestCancel()
+    func popoverDidRequestOpenSettings()
 }
 
 class RecordingPopoverController: NSViewController {
@@ -184,6 +185,10 @@ class RecordingPopoverController: NSViewController {
         timerLabel.textColor = .secondaryLabelColor
         timerLabel.alignment = .right
 
+        // Settings gear button (top-right)
+        let settingsButton = makeSettingsButton()
+        settingsButton.frame = NSRect(x: W - pad - 20, y: totalH - pad - 20, width: 20, height: 20)
+
         recordingView.addSubview(redDotGlow)
         recordingView.addSubview(redDot)
         recordingView.addSubview(recordingLabel)
@@ -193,6 +198,7 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(hintsLabel)
         recordingView.addSubview(cancelLabel)
         recordingView.addSubview(cancelButton)
+        recordingView.addSubview(settingsButton)
 
         view.addSubview(recordingView)
     }
@@ -200,6 +206,7 @@ class RecordingPopoverController: NSViewController {
     // MARK: - Processing View
 
     private func buildProcessingView() {
+        let pad: CGFloat = 16
         processingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: 90))
         processingView.wantsLayer = true
 
@@ -214,8 +221,12 @@ class RecordingPopoverController: NSViewController {
         label.textColor = .secondaryLabelColor
         label.alignment = .center
 
+        let settingsButton = makeSettingsButton()
+        settingsButton.frame = NSRect(x: W - pad - 20, y: 90 - pad - 20, width: 20, height: 20)
+
         processingView.addSubview(spinner)
         processingView.addSubview(label)
+        processingView.addSubview(settingsButton)
 
         view.addSubview(processingView)
     }
@@ -237,6 +248,18 @@ class RecordingPopoverController: NSViewController {
             button.bezelColor = .controlAccentColor
         }
 
+        return button
+    }
+
+    private func makeSettingsButton() -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: "gear", accessibilityDescription: "Settings")
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = .secondaryLabelColor
+        button.target = self
+        button.action = #selector(settingsClicked)
         return button
     }
 
@@ -309,5 +332,9 @@ class RecordingPopoverController: NSViewController {
 
     @objc private func cancelClicked() {
         delegate?.popoverDidRequestCancel()
+    }
+
+    @objc private func settingsClicked() {
+        delegate?.popoverDidRequestOpenSettings()
     }
 }
