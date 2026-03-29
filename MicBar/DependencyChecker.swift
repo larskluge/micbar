@@ -50,7 +50,7 @@ final class DependencyChecker: ObservableObject {
     private func checkImproveWriting() -> DependencyStatus {
         return checkHTTP(
             name: "LLM proxy :8317",
-            description: "Powers improve, answer, and translate. Optional.",
+            description: "Powers all LLM-based text operations. Optional.",
             url: "http://localhost:8317/v1/models",
             installCommand: "brew install cliproxyapi"
         )
