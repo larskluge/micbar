@@ -6,7 +6,7 @@ Built with Swift and AppKit. No Xcode IDE required.
 
 ## Prerequisites
 
-- Swift toolchain (Xcode Command Line Tools)
+- Swift toolchain (`xcode-select --install`)
 - WhisperKit server on port 50060 — speech-to-text service (`brew install whisperkit-cli`)
 - LLM proxy on port 8317 — powers all LLM-based text operations, optional (`brew install cliproxyapi`)
 
