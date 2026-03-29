@@ -1,17 +1,28 @@
 import Foundation
 import Combine
 
+struct ChainEntry: Identifiable, Equatable {
+    let id: UUID
+    let label: String
+    let text: String
+}
+
 struct TranscriptRecord: Identifiable {
     let id: UUID
     let timestamp: Date
     var rawText: String
-    var improvedText: String?
-    var isImproving: Bool
-    var improveError: String?
-    var rawEdited: Bool = false
-    var answerText: String?
-    var isAnswering: Bool = false
-    var answerError: String?
+    var chain: [ChainEntry] = []
+    var pendingLabel: String?
+    var pendingError: String?
+
+    /// The text that the next operation should work on: last chain entry or rawText.
+    var latestText: String {
+        chain.last?.text ?? rawText
+    }
+
+    var isBusy: Bool {
+        pendingLabel != nil
+    }
 }
 
 enum RecordingState {
@@ -23,77 +34,98 @@ class TranscriptStore: ObservableObject {
     @Published var recordingState: RecordingState = .idle
 
     func addTranscript(raw: String, improved: String?, improveError: String? = nil, answer: String? = nil, answerError: String? = nil) {
-        let record = TranscriptRecord(
+        var record = TranscriptRecord(
             id: UUID(),
             timestamp: Date(),
-            rawText: raw,
-            improvedText: improved,
-            isImproving: false,
-            improveError: improveError,
-            answerText: answer,
-            isAnswering: false,
-            answerError: answerError
+            rawText: raw
         )
+        if let improved = improved {
+            record.chain.append(ChainEntry(id: UUID(), label: "Improved", text: improved))
+        }
+        if let error = improveError {
+            record.pendingError = error
+        }
+        if let answer = answer {
+            record.chain.append(ChainEntry(id: UUID(), label: "Answer", text: answer))
+        }
+        if let error = answerError, record.pendingError == nil {
+            record.pendingError = error
+        }
         records.insert(record, at: 0)
     }
 
     func updateRawText(id: UUID, text: String) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         records[idx].rawText = text
-        records[idx].rawEdited = true
     }
 
-    func updateImprovedText(id: UUID, text: String) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].improvedText = text
-        records[idx].isImproving = false
+    func updateChainText(recordId: UUID, entryId: UUID, text: String) {
+        guard let idx = records.firstIndex(where: { $0.id == recordId }),
+              let entryIdx = records[idx].chain.firstIndex(where: { $0.id == entryId }) else { return }
+        let old = records[idx].chain[entryIdx]
+        records[idx].chain[entryIdx] = ChainEntry(id: old.id, label: old.label, text: text)
     }
 
-    func updateAnswerText(id: UUID, text: String) {
+    func improveText(id: UUID) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].answerText = text
-        records[idx].isAnswering = false
-    }
-
-    func improveTranscript(id: UUID) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].isImproving = true
-        records[idx].improveError = nil
-        records[idx].rawEdited = false
-        let raw = records[idx].rawText
+        records[idx].pendingLabel = "Improving..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runImproveWriting(raw)
+            let result = runImproveWriting(input)
             DispatchQueue.main.async {
                 guard let self = self,
                       let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
                 if let improved = result.text {
-                    self.records[idx].improvedText = improved
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Improved", text: improved))
                 } else {
-                    self.records[idx].improveError = result.error
+                    self.records[idx].pendingError = result.error
                 }
-                self.records[idx].isImproving = false
+                self.records[idx].pendingLabel = nil
             }
         }
     }
 
     func answerQuestion(id: UUID) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].isAnswering = true
-        records[idx].answerError = nil
-        let raw = records[idx].rawText
+        records[idx].pendingLabel = "Answering..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runAnswerQuestion(raw)
+            let result = runAnswerQuestion(input)
             DispatchQueue.main.async {
                 guard let self = self,
                       let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
                 if let answer = result.text {
-                    self.records[idx].answerText = answer
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Answer", text: answer))
                 } else {
-                    self.records[idx].answerError = result.error
+                    self.records[idx].pendingError = result.error
                 }
-                self.records[idx].isAnswering = false
+                self.records[idx].pendingLabel = nil
+            }
+        }
+    }
+
+    func translate(id: UUID, language: String) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        let flag = LanguageSettings.flagForLanguage[language] ?? ""
+        records[idx].pendingLabel = "Translating to \(language)..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = runTranslate(input, targetLanguage: language)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
+                if let translated = result.text {
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "\(flag) \(language)", text: translated))
+                } else {
+                    self.records[idx].pendingError = result.error
+                }
+                self.records[idx].pendingLabel = nil
             }
         }
     }

@@ -151,6 +151,40 @@ func runAnswerQuestion(
     return runLLMCall(text, label: "answer-question", config: llmConfig, client: client, log: log)
 }
 
+/// Configuration for the translate LLM call.
+struct TranslateConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+
+    static func systemPrompt(targetLanguage: String) -> String {
+        """
+        You are a translator. Detect the language of the user's input. \
+        If the input is in \(targetLanguage), translate it back to the original language it was likely translated from. \
+        If you cannot determine the original language, translate it to English. \
+        If the input is NOT in \(targetLanguage), translate it into \(targetLanguage). \
+        Return ONLY the translated text, nothing else — no XML tags, no explanations, no preamble.
+        """
+    }
+}
+
+/// Calls the LLM proxy to translate text to/from a target language. Blocks the calling thread.
+func runTranslate(
+    _ text: String,
+    targetLanguage: String,
+    config: TranslateConfig = TranslateConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: TranslateConfig.systemPrompt(targetLanguage: targetLanguage),
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "translate-\(targetLanguage.lowercased())", config: llmConfig, client: client, log: log)
+}
+
 /// Internal shared config for LLM calls.
 private struct LLMCallConfig {
     var url: String
