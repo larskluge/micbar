@@ -511,41 +511,67 @@ struct DependencyTree: View {
 struct DependencyRow: View {
     let dep: DependencyStatus
     let isParent: Bool
+    @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "circle.fill")
-                .font(.system(size: 6))
-                .foregroundColor(dep.found ? .green : .red)
-                .padding(.top, dep.description != nil && isParent ? -8 : 0)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 6))
+                    .foregroundColor(dep.found ? .green : .red)
+                    .padding(.top, dep.description != nil && isParent ? -8 : 0)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(dep.name)
-                    .font(.system(size: isParent ? 13 : 12, weight: isParent ? .medium : .regular))
-                    .foregroundColor(isParent ? .primary : .secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(dep.name)
+                        .font(.system(size: isParent ? 13 : 12, weight: isParent ? .medium : .regular))
+                        .foregroundColor(isParent ? .primary : .secondary)
 
-                if let description = dep.description, isParent {
-                    Text(description)
-                        .font(.system(size: 11))
+                    if let description = dep.description, isParent {
+                        Text(description)
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                    }
+                }
+
+                if let path = dep.path {
+                    Text(path)
+                        .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                Spacer()
+
+                if let error = dep.error {
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundColor(.red)
+                        .lineLimit(1)
                 }
             }
 
-            if let path = dep.path {
-                Text(path)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(Color(nsColor: .tertiaryLabelColor))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            if let cmd = dep.installCommand, isParent {
+                HStack(spacing: 4) {
+                    Text(cmd)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .secondaryLabelColor))
+                        .textSelection(.enabled)
 
-            Spacer()
-
-            if let error = dep.error {
-                Text(error)
-                    .font(.system(size: 11))
-                    .foregroundColor(.red)
-                    .lineLimit(1)
+                    Button(action: {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(cmd, forType: .string)
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }
+                    }) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                            .foregroundColor(copied ? .green : Color(nsColor: .tertiaryLabelColor))
+                    }
+                    .buttonStyle(.plain)
+                    .animation(.easeInOut(duration: 0.15), value: copied)
+                }
+                .padding(.leading, 18)
             }
         }
     }
