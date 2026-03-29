@@ -151,6 +151,61 @@ func runAnswerQuestion(
     return runLLMCall(text, label: "answer-question", config: llmConfig, client: client, log: log)
 }
 
+/// Calls the LLM proxy to summarize the given text. Blocks the calling thread.
+func runSummarize(
+    _ text: String,
+    config: SummarizeConfig = SummarizeConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "summarize", config: llmConfig, client: client, log: log)
+}
+
+/// Calls the LLM proxy to extract key points from the given text. Blocks the calling thread.
+func runKeyPoints(
+    _ text: String,
+    config: KeyPointsConfig = KeyPointsConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "key-points", config: llmConfig, client: client, log: log)
+}
+
+/// Configuration for the summarize LLM call.
+struct SummarizeConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var systemPrompt: String = """
+        You are a concise summarizer. Detect which language the user's input is in and always respond in the same language. \
+        Return ONLY a short summary of the text that feels appropriate for its length and content — no XML tags, no explanations, no preamble.
+        """
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+}
+
+/// Configuration for the key-points LLM call.
+struct KeyPointsConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var systemPrompt: String = """
+        You are an analyst who extracts key points. Detect which language the user's input is in and always respond in the same language. \
+        Return ONLY a bullet-point list (using "•") of the essential points from the text. \
+        Keep each point short and crisp — no fluff, no intro, no outro. Cover all key points without being overly verbose.
+        """
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+}
+
 /// Configuration for the translate LLM call.
 struct TranslateConfig {
     var url: String = "http://localhost:8317/v1/chat/completions"

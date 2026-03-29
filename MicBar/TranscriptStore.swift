@@ -108,6 +108,48 @@ class TranscriptStore: ObservableObject {
         }
     }
 
+    func summarize(id: UUID) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        records[idx].pendingLabel = "Summarizing..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = runSummarize(input)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
+                if let summary = result.text {
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Summary", text: summary))
+                } else {
+                    self.records[idx].pendingError = result.error
+                }
+                self.records[idx].pendingLabel = nil
+            }
+        }
+    }
+
+    func keyPoints(id: UUID) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        records[idx].pendingLabel = "Extracting key points..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = runKeyPoints(input)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
+                if let points = result.text {
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Key Points", text: points))
+                } else {
+                    self.records[idx].pendingError = result.error
+                }
+                self.records[idx].pendingLabel = nil
+            }
+        }
+    }
+
     func translate(id: UUID, language: String) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         let flag = LanguageSettings.flagForLanguage[language] ?? ""

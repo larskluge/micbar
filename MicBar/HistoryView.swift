@@ -373,6 +373,20 @@ struct TranscriptCard: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
+                    Button(action: { store.summarize(id: record.id) }) {
+                        Text("Summarize")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button(action: { store.keyPoints(id: record.id) }) {
+                        Text("Key Points")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
                     Button(action: { store.answerQuestion(id: record.id) }) {
                         Text("Answer")
                             .font(.system(size: 11, weight: .medium))
