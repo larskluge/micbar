@@ -4,20 +4,20 @@ import ServiceManagement
 struct HistoryView: View {
     @ObservedObject var store: TranscriptStore
     @ObservedObject var languageSettings: LanguageSettings
+    @ObservedObject var tabSelection: TabSelection
     var onRecord: () -> Void
     var onStop: () -> Void
-    @State private var selectedTab: Int
 
-    init(store: TranscriptStore, languageSettings: LanguageSettings = .shared, onRecord: @escaping () -> Void, onStop: @escaping () -> Void, initialTab: Int = 0) {
+    init(store: TranscriptStore, languageSettings: LanguageSettings = .shared, onRecord: @escaping () -> Void, onStop: @escaping () -> Void, tabSelection: TabSelection = TabSelection()) {
         self.store = store
         self.languageSettings = languageSettings
         self.onRecord = onRecord
         self.onStop = onStop
-        self._selectedTab = State(initialValue: initialTab)
+        self.tabSelection = tabSelection
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: $tabSelection.selectedTab) {
             TranscriptsTab(store: store, languageSettings: languageSettings)
                 .tabItem { Label("History", systemImage: "clock") }
                 .tag(0)
@@ -27,7 +27,7 @@ struct HistoryView: View {
                 .tag(1)
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if selectedTab == 0 {
+            if tabSelection.selectedTab == 0 {
                 HStack {
                     Spacer()
                     RecordingControls(state: store.recordingState, onRecord: onRecord, onStop: onStop)

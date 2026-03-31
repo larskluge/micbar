@@ -1,11 +1,16 @@
 import AppKit
 import SwiftUI
 
+class TabSelection: ObservableObject {
+    @Published var selectedTab: Int = 0
+}
+
 class HistoryWindowController: NSObject, NSWindowDelegate {
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
     private let store: TranscriptStore
     private let onRecord: () -> Void
     private let onStop: () -> Void
+    let tabSelection = TabSelection()
 
     init(store: TranscriptStore, onRecord: @escaping () -> Void, onStop: @escaping () -> Void) {
         self.store = store
@@ -14,12 +19,8 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
     }
 
     func showWindow(tab: Int = 0) {
+        tabSelection.selectedTab = tab
         if let window = window {
-            if tab != 0 {
-                // Recreate content to switch tab
-                let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, initialTab: tab))
-                window.contentViewController = hostingController
-            }
             NSApp.setActivationPolicy(.regular)
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -28,7 +29,7 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
 
         ensureEditMenu()
 
-        let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, initialTab: tab))
+        let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, tabSelection: tabSelection))
 
         let width: CGFloat = 900
         let height: CGFloat = 700

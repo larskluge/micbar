@@ -187,23 +187,95 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             log.info("start: ignored, state=\(state)")
             return
         }
-        log.info("start: beginning recording")
-        recordStartTime = Date()
-        popoverController.setRecordingStartTime(recordStartTime!)
 
-        recorder.onReady = { [weak self] in
-            self?.state = .recording
-        }
+        state = .waiting
+        log.info("start: checking WhisperKit availability")
 
-        if recorder.start() {
-            state = .waiting
-            if showPopover {
-                self.showPopover()
+        checkWhisperKit { [weak self] available in
+            guard let self = self else { return }
+
+            guard available else {
+                self.log.warning("WhisperKit server not reachable, opening settings")
+                self.state = .idle
+                self.historyWindowController.showWindow(tab: 1)
+                let alert = NSAlert()
+                alert.messageText = "WhisperKit Unavailable"
+                alert.informativeText = "Cannot connect to WhisperKit server on localhost:50060."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+
+                let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+                let labelFont = NSFont.systemFont(ofSize: 12)
+                let labelColor = NSColor.secondaryLabelColor
+
+                let stack = NSStackView()
+                stack.orientation = .vertical
+                stack.alignment = .leading
+                stack.spacing = 4
+
+                let installLabel = NSTextField(labelWithString: "Install:")
+                installLabel.font = labelFont
+                installLabel.textColor = labelColor
+
+                let installCmd = NSTextField(labelWithString: "brew install whisperkit-cli")
+                installCmd.font = mono
+                installCmd.isSelectable = true
+
+                let startLabel = NSTextField(labelWithString: "Then start the server:")
+                startLabel.font = labelFont
+                startLabel.textColor = labelColor
+
+                let startCmd = NSTextField(labelWithString: "whisperkit-cli serve")
+                startCmd.font = mono
+                startCmd.isSelectable = true
+
+                stack.addArrangedSubview(installLabel)
+                stack.addArrangedSubview(installCmd)
+                stack.setCustomSpacing(12, after: installCmd)
+                stack.addArrangedSubview(startLabel)
+                stack.addArrangedSubview(startCmd)
+
+                stack.setFrameSize(stack.fittingSize)
+                alert.accessoryView = stack
+                if let window = self.historyWindowController.window {
+                    alert.beginSheetModal(for: window)
+                } else {
+                    alert.runModal()
+                }
+                return
             }
-        } else {
-            log.warning("failed to start recording")
-            notify(title: "MicBar", body: "Failed to start recording")
+
+            self.log.info("start: beginning recording")
+            self.recordStartTime = Date()
+            self.popoverController.setRecordingStartTime(self.recordStartTime!)
+
+            self.recorder.onReady = { [weak self] in
+                self?.state = .recording
+            }
+
+            if self.recorder.start() {
+                if showPopover {
+                    self.showPopover()
+                }
+            } else {
+                self.log.warning("failed to start recording")
+                self.state = .idle
+                self.notify(title: "MicBar", body: "Failed to start recording")
+            }
         }
+    }
+
+    private func checkWhisperKit(completion: @escaping (Bool) -> Void) {
+        guard let url = URL(string: "http://localhost:50060/health") else {
+            completion(false)
+            return
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 2
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            let ok = error == nil && (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+            DispatchQueue.main.async { completion(ok) }
+        }.resume()
     }
 
     private func cancelRecording() {
