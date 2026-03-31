@@ -83,6 +83,7 @@ struct TranscriptsTab: View {
 
 struct SettingsTab: View {
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
+    @State private var whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
     @StateObject private var checker = DependencyChecker()
     @ObservedObject var languageSettings: LanguageSettings
 
@@ -92,9 +93,13 @@ struct SettingsTab: View {
                 DependenciesSection(checker: checker)
 
                 Section("General") {
-                    Toggle("Launch at Login", isOn: $loginEnabled)
+                    Toggle("Launch MicBar at Login", isOn: $loginEnabled)
                         .onChange(of: loginEnabled) { newValue in
                             toggleLogin(newValue)
+                        }
+                    Toggle("Launch WhisperKit at Login", isOn: $whisperKitAtLogin)
+                        .onChange(of: whisperKitAtLogin) { newValue in
+                            toggleWhisperKit(newValue)
                         }
                 }
 
@@ -112,7 +117,10 @@ struct SettingsTab: View {
             .font(.system(size: 12))
             .padding(.bottom, 20)
         }
-        .onAppear { checker.checkAll() }
+        .onAppear {
+            checker.checkAll()
+            whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
+        }
     }
 
     private func toggleLogin(_ enabled: Bool) {
@@ -125,6 +133,24 @@ struct SettingsTab: View {
         } catch {
             Logger.shared.warning("login item toggle error: \(error)")
             loginEnabled = SMAppService.mainApp.status == .enabled
+        }
+    }
+
+    private func toggleWhisperKit(_ enabled: Bool) {
+        do {
+            if enabled {
+                try WhisperKitLaunchAgent.install()
+            } else {
+                try WhisperKitLaunchAgent.uninstall()
+            }
+        } catch {
+            Logger.shared.warning("WhisperKit launch agent toggle error: \(error)")
+            whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
+        }
+        for i in 1...4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.5) {
+                checker.checkAll()
+            }
         }
     }
 }
