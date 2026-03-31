@@ -7,7 +7,6 @@ struct TranscriptionResult: Equatable {
 
 struct TranscriptionConfig {
     var url: String = "http://localhost:50060/v1/audio/transcriptions"
-    var model: String = "whisperkit-large-v3-v20250220"
     var timeoutSeconds: TimeInterval = 60
 }
 
@@ -19,10 +18,12 @@ func buildTranscriptionRequest(wavData: Data, config: TranscriptionConfig) -> UR
     let boundary = UUID().uuidString
     var body = Data()
 
-    // model field
+    // model field: required by WhisperKit's OpenAPI transport layer but the value
+    // is ignored — the server always uses whatever model was loaded at startup.
+    // See OpenAIHandler.swift in argmaxinc/WhisperKit.
     body.append("--\(boundary)\r\n".data(using: .utf8)!)
     body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-    body.append("\(config.model)\r\n".data(using: .utf8)!)
+    body.append("default\r\n".data(using: .utf8)!)
 
     // file field
     body.append("--\(boundary)\r\n".data(using: .utf8)!)
