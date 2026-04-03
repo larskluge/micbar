@@ -69,14 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover.animates = true
         popover.delegate = self
 
-        answerPopoverController = AnswerPopoverController()
-        answerPopoverController.delegate = self
-        answerPopoverController.onSizeChange = { [weak self] size in
-            self?.answerPopover.contentSize = size
-        }
-        answerPopover.contentViewController = answerPopoverController
-        answerPopover.behavior = .transient
-        answerPopover.animates = true
+        setupAnswerPopover()
 
         if let button = statusItem.button {
             button.action = #selector(statusItemClicked)
@@ -416,9 +409,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
+    private func setupAnswerPopover() {
+        answerPopoverController = AnswerPopoverController()
+        answerPopoverController.delegate = self
+        answerPopoverController.onSizeChange = { [weak self] size in
+            self?.answerPopover.contentSize = size
+        }
+        answerPopover.contentViewController = answerPopoverController
+        answerPopover.behavior = .transient
+        answerPopover.animates = true
+    }
+
     private func showAnswerPopover() {
         guard let button = statusItem.button else { return }
-        answerPopoverController.showSpinner()
+        setupAnswerPopover()
         answerPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         answerPopover.contentViewController?.view.window?.makeKey()

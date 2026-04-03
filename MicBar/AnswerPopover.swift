@@ -16,11 +16,14 @@ class AnswerPopoverController: NSViewController {
 
     private let maxW: CGFloat = 500
     private let minW: CGFloat = 280
+    private let spinnerH: CGFloat = 90
+
+    var defaultSize: NSSize { NSSize(width: minW, height: spinnerH) }
 
     var onSizeChange: ((NSSize) -> Void)?
 
     override func loadView() {
-        view = NSView(frame: NSRect(x: 0, y: 0, width: minW, height: 90))
+        view = NSView(frame: NSRect(x: 0, y: 0, width: minW, height: spinnerH))
         view.wantsLayer = true
 
         buildSpinnerView()
@@ -33,6 +36,8 @@ class AnswerPopoverController: NSViewController {
         _ = self.view
         spinnerView.isHidden = false
         answerView.isHidden = true
+        answerView.frame = NSRect(x: 0, y: 0, width: minW, height: spinnerH)
+        answerTextView.string = ""
         setViewSize(spinnerView, width: minW)
     }
 
@@ -47,13 +52,12 @@ class AnswerPopoverController: NSViewController {
     // MARK: - Spinner View
 
     private func buildSpinnerView() {
-        let h: CGFloat = 90
-        spinnerView = NSView(frame: NSRect(x: 0, y: 0, width: minW, height: h))
+        spinnerView = NSView(frame: NSRect(x: 0, y: 0, width: minW, height: spinnerH))
         spinnerView.wantsLayer = true
 
         // Wrapper centered in spinnerView via autoresizing
         let contentH: CGFloat = 20 + 8 + 20
-        let wrapper = NSView(frame: NSRect(x: (minW - 120) / 2, y: (h - contentH) / 2, width: 120, height: contentH))
+        let wrapper = NSView(frame: NSRect(x: (minW - 120) / 2, y: (spinnerH - contentH) / 2, width: 120, height: contentH))
         wrapper.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
 
         let spinner = NSProgressIndicator(frame: NSRect(x: (120 - 20) / 2, y: 28, width: 20, height: 20))
