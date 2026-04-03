@@ -24,6 +24,7 @@ final class AudioRecorder {
             throw AudioRecorderError.converterFailed
         }
 
+        inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] pcmBuffer, _ in
             guard let self = self else { return }
             self.convert(pcmBuffer, using: converter, targetFormat: targetFormat)
