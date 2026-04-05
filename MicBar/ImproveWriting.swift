@@ -241,28 +241,23 @@ func runTranslate(
 }
 
 /// Configuration for a local Ollama LLM call.
-struct OllamaImproveConfig {
+struct OllamaConfig {
     var url: String = "http://localhost:11434/api/chat"
     var model: String = "gemma4:26b"
-    var systemPrompt: String = """
-        You are a copy writer. Detect which language the user's input is in and always respond in the same language. \
-        Return ONLY the improved text, nothing else — no XML tags, no explanations, no preamble.
-
-        Write a slightly improved version of the user's input. Shorten sentences where it makes sense; \
-        do not do this aggressively. Do not change meaning.
-        """
+    var systemPrompt: String
     var timeoutSeconds: TimeInterval = 120
     var maxRetries: Int = 1
 }
 
-/// Calls the local Ollama server to improve text. Blocks the calling thread.
-func runImproveLocal(
+/// Calls the local Ollama server with a given prompt. Blocks the calling thread.
+func runOllamaCall(
     _ text: String,
-    config: OllamaImproveConfig = OllamaImproveConfig(),
+    label: String,
+    config: OllamaConfig,
     client: HTTPClient = URLSessionHTTPClient(),
     log: Logger = .shared
 ) -> ImproveResult {
-    log.info("improve-local input (\(text.count) chars): \(String(text.prefix(500)))")
+    log.info("\(label) input (\(text.count) chars): \(String(text.prefix(500)))")
     let startTime = Date()
 
     guard let url = URL(string: config.url) else {
@@ -304,16 +299,16 @@ func runImproveLocal(
         let elapsed = String(format: "%.1f", -startTime.timeIntervalSinceNow)
 
         if lastResult.text != nil {
-            log.info("improve-local output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
+            log.info("\(label) output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
             return lastResult
         }
 
         if isRetryableError(lastResult) && attempt <= config.maxRetries {
-            log.info("improve-local attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
+            log.info("\(label) attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
             continue
         }
 
-        log.warning("improve-local failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
+        log.warning("\(label) failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
         return lastResult
     }
 

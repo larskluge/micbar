@@ -85,105 +85,66 @@ class TranscriptStore: ObservableObject {
         records[idx].chain[entryIdx] = ChainEntry(id: old.id, label: old.label, text: text)
     }
 
-    func improveText(id: UUID) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].pendingLabel = "Improving..."
-        records[idx].pendingError = nil
-        let input = records[idx].latestText
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runImproveWriting(input)
-            DispatchQueue.main.async {
-                guard let self = self,
-                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let improved = result.text {
-                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Improved", text: improved))
-                } else {
-                    self.records[idx].pendingError = result.error
-                }
-                self.records[idx].pendingLabel = nil
-            }
-        }
+    private func ollamaConfig(systemPrompt: String) -> OllamaConfig {
+        OllamaConfig(
+            model: OllamaSettings.shared.selectedModel,
+            systemPrompt: systemPrompt
+        )
     }
 
-    func improveLocal(id: UUID) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        let model = OllamaSettings.shared.selectedModel
-        records[idx].pendingLabel = "Improving locally..."
-        records[idx].pendingError = nil
-        let input = records[idx].latestText
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let config = OllamaImproveConfig(model: model)
-            let result = runImproveLocal(input, config: config)
-            DispatchQueue.main.async {
-                guard let self = self,
-                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let improved = result.text {
-                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Improved (Local)", text: improved))
-                } else {
-                    self.records[idx].pendingError = result.error
-                }
-                self.records[idx].pendingLabel = nil
+    func improveText(id: UUID) {
+        let useLocal = OllamaSettings.shared.useLocal
+        runLLMOperation(id: id, pendingLabel: "Improving\(useLocal ? " locally" : "")...", chainLabel: "Improved") { input in
+            if useLocal {
+                return runOllamaCall(input, label: "improve-local", config: self.ollamaConfig(systemPrompt: ImproveWritingConfig().systemPrompt))
             }
+            return runImproveWriting(input)
         }
     }
 
     func answerQuestion(id: UUID) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].pendingLabel = "Answering..."
-        records[idx].pendingError = nil
-        let input = records[idx].latestText
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runAnswerQuestion(input)
-            DispatchQueue.main.async {
-                guard let self = self,
-                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let answer = result.text {
-                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Answer", text: answer))
-                } else {
-                    self.records[idx].pendingError = result.error
-                }
-                self.records[idx].pendingLabel = nil
+        let useLocal = OllamaSettings.shared.useLocal
+        runLLMOperation(id: id, pendingLabel: "Answering\(useLocal ? " locally" : "")...", chainLabel: "Answer") { input in
+            if useLocal {
+                return runOllamaCall(input, label: "answer-local", config: self.ollamaConfig(systemPrompt: AnswerQuestionConfig().systemPrompt))
             }
+            return runAnswerQuestion(input)
         }
     }
 
     func summarize(id: UUID) {
-        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].pendingLabel = "Summarizing..."
-        records[idx].pendingError = nil
-        let input = records[idx].latestText
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runSummarize(input)
-            DispatchQueue.main.async {
-                guard let self = self,
-                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let summary = result.text {
-                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Summary", text: summary))
-                } else {
-                    self.records[idx].pendingError = result.error
-                }
-                self.records[idx].pendingLabel = nil
+        let useLocal = OllamaSettings.shared.useLocal
+        runLLMOperation(id: id, pendingLabel: "Summarizing\(useLocal ? " locally" : "")...", chainLabel: "Summary") { input in
+            if useLocal {
+                return runOllamaCall(input, label: "summarize-local", config: self.ollamaConfig(systemPrompt: SummarizeConfig().systemPrompt))
             }
+            return runSummarize(input)
         }
     }
 
     func keyPoints(id: UUID) {
+        let useLocal = OllamaSettings.shared.useLocal
+        runLLMOperation(id: id, pendingLabel: "Extracting key points\(useLocal ? " locally" : "")...", chainLabel: "Key Points") { input in
+            if useLocal {
+                return runOllamaCall(input, label: "keypoints-local", config: self.ollamaConfig(systemPrompt: KeyPointsConfig().systemPrompt))
+            }
+            return runKeyPoints(input)
+        }
+    }
+
+    private func runLLMOperation(id: UUID, pendingLabel: String, chainLabel: String, operation: @escaping (String) -> ImproveResult) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
-        records[idx].pendingLabel = "Extracting key points..."
+        records[idx].pendingLabel = pendingLabel
         records[idx].pendingError = nil
         let input = records[idx].latestText
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = runKeyPoints(input)
+            let result = operation(input)
             DispatchQueue.main.async {
                 guard let self = self,
                       let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
-                if let points = result.text {
-                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Key Points", text: points))
+                if let text = result.text {
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: chainLabel, text: text))
                 } else {
                     self.records[idx].pendingError = result.error
                 }

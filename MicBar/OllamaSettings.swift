@@ -4,12 +4,19 @@ import Combine
 class OllamaSettings: ObservableObject {
     static let shared = OllamaSettings()
 
-    private let key = "ollamaSelectedModel"
+    private let modelKey = "ollamaSelectedModel"
+    private let modeKey = "useLocalLLM"
     private let defaultModel = "gemma4:26b"
 
     @Published var selectedModel: String {
         didSet {
-            UserDefaults.standard.set(selectedModel, forKey: key)
+            UserDefaults.standard.set(selectedModel, forKey: modelKey)
+        }
+    }
+
+    @Published var useLocal: Bool {
+        didSet {
+            UserDefaults.standard.set(useLocal, forKey: modeKey)
         }
     }
 
@@ -17,7 +24,8 @@ class OllamaSettings: ObservableObject {
     @Published var isFetching = false
 
     init() {
-        self.selectedModel = UserDefaults.standard.string(forKey: key) ?? defaultModel
+        self.selectedModel = UserDefaults.standard.string(forKey: modelKey) ?? defaultModel
+        self.useLocal = UserDefaults.standard.bool(forKey: modeKey)
     }
 
     func fetchModels() {
