@@ -96,7 +96,7 @@ class TranscriptStore: ObservableObject {
     }
 
     func improveText(id: UUID) {
-        let useLocal = OllamaSettings.shared.useLocal
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
         runLLMOperation(id: id, pendingLabel: "Improving\(useLocal ? " locally" : "")...", chainLabel: "Improved") { input in
             if useLocal {
                 return runOllamaCall(input, label: "improve-local", config: self.ollamaConfig(systemPrompt: ImproveWritingConfig().systemPrompt))
@@ -106,7 +106,7 @@ class TranscriptStore: ObservableObject {
     }
 
     func answerQuestion(id: UUID) {
-        let useLocal = OllamaSettings.shared.useLocal
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
         runLLMOperation(id: id, pendingLabel: "Answering\(useLocal ? " locally" : "")...", chainLabel: "Answer") { input in
             if useLocal {
                 return runOllamaCall(input, label: "answer-local", config: self.ollamaConfig(systemPrompt: AnswerQuestionConfig().systemPrompt))
@@ -116,7 +116,7 @@ class TranscriptStore: ObservableObject {
     }
 
     func summarize(id: UUID) {
-        let useLocal = OllamaSettings.shared.useLocal
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
         runLLMOperation(id: id, pendingLabel: "Summarizing\(useLocal ? " locally" : "")...", chainLabel: "Summary") { input in
             if useLocal {
                 return runOllamaCall(input, label: "summarize-local", config: self.ollamaConfig(systemPrompt: SummarizeConfig().systemPrompt))
@@ -126,7 +126,7 @@ class TranscriptStore: ObservableObject {
     }
 
     func keyPoints(id: UUID) {
-        let useLocal = OllamaSettings.shared.useLocal
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
         runLLMOperation(id: id, pendingLabel: "Extracting key points\(useLocal ? " locally" : "")...", chainLabel: "Key Points") { input in
             if useLocal {
                 return runOllamaCall(input, label: "keypoints-local", config: self.ollamaConfig(systemPrompt: KeyPointsConfig().systemPrompt))
@@ -159,7 +159,7 @@ class TranscriptStore: ObservableObject {
     }
 
     func translate(id: UUID, language: String) {
-        let useLocal = OllamaSettings.shared.useLocal
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         let flag = LanguageSettings.flagForLanguage[language] ?? ""
         let chainLabel = "\(flag) \(language)"

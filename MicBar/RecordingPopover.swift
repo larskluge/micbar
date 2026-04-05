@@ -18,7 +18,6 @@ class RecordingPopoverController: NSViewController {
     private var timerLabel: NSTextField!
     private var redDot: NSView!
     private var redDotGlow: NSView!
-
     private var displayTimer: Timer?
     private var recordingStartTime: Date?
     private var pulseAnimation: Timer?
@@ -39,6 +38,7 @@ class RecordingPopoverController: NSViewController {
         buildProcessingView()
 
         showState(.waiting)
+
     }
 
     func updateState(_ state: AppDelegateState) {

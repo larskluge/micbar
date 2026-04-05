@@ -50,6 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             self.log.info("notification auth: granted=\(granted) error=\(String(describing: error))")
         }
 
+        OllamaSettings.shared.probeAvailability()
         setupStatusItem()
         log.info("MicBar initialized")
     }
@@ -311,12 +312,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             var improveDuration: TimeInterval?
             var answerDuration: TimeInterval?
 
+            let useLocal = OllamaSettings.shared.effectiveUseLocal
+
             switch mode {
             case .copy:
                 break
             case .improve:
                 let llmStart = Date()
-                let result = runImproveWriting(text)
+                let result: ImproveResult
+                if useLocal {
+                    result = runOllamaCall(text, label: "improve-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: ImproveWritingConfig().systemPrompt))
+                } else {
+                    result = runImproveWriting(text)
+                }
                 improveDuration = -llmStart.timeIntervalSinceNow
                 if let improved = result.text {
                     text = improved
@@ -327,7 +335,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
             case .answer:
                 let llmStart = Date()
-                let result = runAnswerQuestion(text)
+                let result: ImproveResult
+                if useLocal {
+                    result = runOllamaCall(text, label: "answer-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: AnswerQuestionConfig().systemPrompt))
+                } else {
+                    result = runAnswerQuestion(text)
+                }
                 answerDuration = -llmStart.timeIntervalSinceNow
                 if let answer = result.text {
                     text = answer
@@ -403,7 +416,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let transcribeDuration = -transcribeStart.timeIntervalSinceNow
 
             let answerStart = Date()
-            let result = runAnswerQuestion(rawText)
+            let useLocal = OllamaSettings.shared.effectiveUseLocal
+            let result: ImproveResult
+            if useLocal {
+                result = runOllamaCall(rawText, label: "answer-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: AnswerQuestionConfig().systemPrompt))
+            } else {
+                result = runAnswerQuestion(rawText)
+            }
             let answerDuration = -answerStart.timeIntervalSinceNow
 
             DispatchQueue.main.async {
