@@ -32,7 +32,7 @@ class HistoryWindowController: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: HistoryView(store: store, onRecord: onRecord, onStop: onStop, tabSelection: tabSelection))
 
         let width: CGFloat = 900
-        let height: CGFloat = 700
+        let height: CGFloat = 800
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height),

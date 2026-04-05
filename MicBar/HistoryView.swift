@@ -30,6 +30,16 @@ struct HistoryView: View {
             if tabSelection.selectedTab == 0 {
                 HStack {
                     Spacer()
+                    Button(action: { store.pasteFromClipboard() }) {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.primary)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(Color.accentColor.opacity(0.15)))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Paste from clipboard")
                     RecordingControls(state: store.recordingState, onRecord: onRecord, onStop: onStop)
                 }
                 .padding(.trailing, 12)
@@ -37,7 +47,7 @@ struct HistoryView: View {
                 .offset(y: -24)
             }
         }
-        .frame(minWidth: 600, idealWidth: 900, minHeight: 500, idealHeight: 700)
+        .frame(minWidth: 600, idealWidth: 900, minHeight: 600, idealHeight: 800)
     }
 }
 
@@ -85,12 +95,15 @@ struct SettingsTab: View {
     @State private var loginEnabled = SMAppService.mainApp.status == .enabled
     @State private var whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
     @StateObject private var checker = DependencyChecker()
+    @StateObject private var ollamaSettings = OllamaSettings.shared
     @ObservedObject var languageSettings: LanguageSettings
 
     var body: some View {
         VStack(spacing: 0) {
             Form {
                 DependenciesSection(checker: checker)
+
+                OllamaModelSection(settings: ollamaSettings)
 
                 Section("General") {
                     Toggle("Launch MicBar at Login", isOn: $loginEnabled)
@@ -119,6 +132,7 @@ struct SettingsTab: View {
         }
         .onAppear {
             checker.checkAll()
+            ollamaSettings.fetchModels()
             whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
         }
     }
@@ -150,6 +164,46 @@ struct SettingsTab: View {
         for i in 1...4 {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.5) {
                 checker.checkAll()
+            }
+        }
+    }
+}
+
+struct OllamaModelSection: View {
+    @ObservedObject var settings: OllamaSettings
+
+    var body: some View {
+        Section("Local LLM Model") {
+            HStack {
+                if settings.isFetching {
+                    ProgressView().controlSize(.small)
+                    Text("Loading models...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else if settings.availableModels.isEmpty {
+                    Text("No models found — is Ollama running?")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else {
+                    Picker("Model", selection: $settings.selectedModel) {
+                        // Include current selection even if not in list
+                        if !settings.availableModels.contains(settings.selectedModel) {
+                            Text(settings.selectedModel).tag(settings.selectedModel)
+                        }
+                        ForEach(settings.availableModels, id: \.self) { model in
+                            Text(model).tag(model)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Button(action: { settings.fetchModels() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
         }
     }
@@ -369,7 +423,7 @@ struct TranscriptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Raw transcript
-            textBlock(label: "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue)
+            textBlock(label: record.source == .pasted ? "Pasted" : "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue)
 
             // Chain of operations
             ForEach(record.chain) { entry in
@@ -399,6 +453,13 @@ struct TranscriptCard: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
+                    Button(action: { store.improveLocal(id: record.id) }) {
+                        Text("Improve Local")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
                     Button(action: { store.summarize(id: record.id) }) {
                         Text("Summarize")
                             .font(.system(size: 11, weight: .medium))
@@ -422,11 +483,12 @@ struct TranscriptCard: View {
 
                     ForEach(languageSettings.orderedSelectedLanguages) { lang in
                         Button(action: { store.translate(id: record.id, language: lang.name) }) {
-                            Text("\(lang.flag) \(lang.name)")
+                            Text(lang.flag)
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .help(lang.name)
                     }
                 }
 
