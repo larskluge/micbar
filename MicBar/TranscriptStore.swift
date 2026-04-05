@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 struct ChainEntry: Identifiable, Equatable {
     let id: UUID
@@ -7,10 +8,16 @@ struct ChainEntry: Identifiable, Equatable {
     let text: String
 }
 
+enum TranscriptSource {
+    case recording
+    case pasted
+}
+
 struct TranscriptRecord: Identifiable {
     let id: UUID
     let timestamp: Date
     var rawText: String
+    var source: TranscriptSource = .recording
     var chain: [ChainEntry] = []
     var pendingLabel: String?
     var pendingError: String?
@@ -54,6 +61,18 @@ class TranscriptStore: ObservableObject {
         records.insert(record, at: 0)
     }
 
+    func pasteFromClipboard() {
+        guard let text = NSPasteboard.general.string(forType: .string),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let record = TranscriptRecord(
+            id: UUID(),
+            timestamp: Date(),
+            rawText: text,
+            source: .pasted
+        )
+        records.insert(record, at: 0)
+    }
+
     func updateRawText(id: UUID, text: String) {
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         records[idx].rawText = text
@@ -79,6 +98,29 @@ class TranscriptStore: ObservableObject {
                       let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
                 if let improved = result.text {
                     self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Improved", text: improved))
+                } else {
+                    self.records[idx].pendingError = result.error
+                }
+                self.records[idx].pendingLabel = nil
+            }
+        }
+    }
+
+    func improveLocal(id: UUID) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        let model = OllamaSettings.shared.selectedModel
+        records[idx].pendingLabel = "Improving locally..."
+        records[idx].pendingError = nil
+        let input = records[idx].latestText
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let config = OllamaImproveConfig(model: model)
+            let result = runImproveLocal(input, config: config)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
+                if let improved = result.text {
+                    self.records[idx].chain.append(ChainEntry(id: UUID(), label: "Improved (Local)", text: improved))
                 } else {
                     self.records[idx].pendingError = result.error
                 }

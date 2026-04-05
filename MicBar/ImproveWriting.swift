@@ -240,6 +240,124 @@ func runTranslate(
     return runLLMCall(text, label: "translate-\(targetLanguage.lowercased())", config: llmConfig, client: client, log: log)
 }
 
+/// Configuration for a local Ollama LLM call.
+struct OllamaImproveConfig {
+    var url: String = "http://localhost:11434/api/chat"
+    var model: String = "gemma4:26b"
+    var systemPrompt: String = """
+        You are a copy writer. Detect which language the user's input is in and always respond in the same language. \
+        Return ONLY the improved text, nothing else — no XML tags, no explanations, no preamble.
+
+        Write a slightly improved version of the user's input. Shorten sentences where it makes sense; \
+        do not do this aggressively. Do not change meaning.
+        """
+    var timeoutSeconds: TimeInterval = 120
+    var maxRetries: Int = 1
+}
+
+/// Calls the local Ollama server to improve text. Blocks the calling thread.
+func runImproveLocal(
+    _ text: String,
+    config: OllamaImproveConfig = OllamaImproveConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    log.info("improve-local input (\(text.count) chars): \(String(text.prefix(500)))")
+    let startTime = Date()
+
+    guard let url = URL(string: config.url) else {
+        return ImproveResult(text: nil, error: "Invalid Ollama URL")
+    }
+
+    let body: [String: Any] = [
+        "model": config.model,
+        "stream": false,
+        "think": false,
+        "messages": [
+            ["role": "system", "content": config.systemPrompt],
+            ["role": "user", "content": text],
+        ],
+    ]
+
+    guard let jsonData = try? JSONSerialization.data(withJSONObject: body) else {
+        return ImproveResult(text: nil, error: "Failed to build Ollama request")
+    }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = jsonData
+    request.timeoutInterval = config.timeoutSeconds
+
+    var lastResult = ImproveResult(text: nil, error: "Timeout")
+
+    for attempt in 1...(1 + config.maxRetries) {
+        let semaphore = DispatchSemaphore(value: 0)
+
+        client.sendRequest(request) { data, response, error in
+            lastResult = parseOllamaResponse(data: data, response: response, error: error)
+            semaphore.signal()
+        }
+
+        _ = semaphore.wait(timeout: .now() + config.timeoutSeconds + 5)
+
+        let elapsed = String(format: "%.1f", -startTime.timeIntervalSinceNow)
+
+        if lastResult.text != nil {
+            log.info("improve-local output (\(lastResult.text!.count) chars) in \(elapsed)s: \(String(lastResult.text!.prefix(500)))")
+            return lastResult
+        }
+
+        if isRetryableError(lastResult) && attempt <= config.maxRetries {
+            log.info("improve-local attempt \(attempt) failed (\(lastResult.error ?? "unknown")), retrying...")
+            continue
+        }
+
+        log.warning("improve-local failed in \(elapsed)s: \(lastResult.error ?? "unknown")")
+        return lastResult
+    }
+
+    return lastResult
+}
+
+/// Parses Ollama's response format (message.content instead of choices[0].message.content).
+private func parseOllamaResponse(data: Data?, response: URLResponse?, error: Error?) -> ImproveResult {
+    if let error = error {
+        let nsError = error as NSError
+        if nsError.code == NSURLErrorCannotConnectToHost || nsError.code == -1004 {
+            return ImproveResult(text: nil, error: "Ollama not running at localhost:11434")
+        }
+        return ImproveResult(text: nil, error: error.localizedDescription)
+    }
+
+    guard let http = response as? HTTPURLResponse else {
+        return ImproveResult(text: nil, error: "No response from Ollama")
+    }
+
+    guard let data = data else {
+        return ImproveResult(text: nil, error: "Empty response from Ollama")
+    }
+
+    guard (200...299).contains(http.statusCode) else {
+        if let body = String(data: data, encoding: .utf8) {
+            return ImproveResult(text: nil, error: "Ollama HTTP \(http.statusCode): \(body.prefix(200))")
+        }
+        return ImproveResult(text: nil, error: "Ollama returned HTTP \(http.statusCode)")
+    }
+
+    guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let message = json["message"] as? [String: Any],
+          let content = message["content"] as? String else {
+        return ImproveResult(text: nil, error: "Failed to parse Ollama response")
+    }
+
+    let improved = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    if improved.isEmpty {
+        return ImproveResult(text: nil, error: "Ollama returned empty response")
+    }
+    return ImproveResult(text: improved, error: nil)
+}
+
 /// Internal shared config for LLM calls.
 private struct LLMCallConfig {
     var url: String
