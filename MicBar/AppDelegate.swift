@@ -292,6 +292,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let duration = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
             self.log.info("recorded \(String(format: "%.1f", duration))s by wall clock")
 
+            let transcribeStart = Date()
             guard var text = self.recorder.stop(), !text.isEmpty else {
                 self.log.warning("no text from transcription")
                 DispatchQueue.main.async {
@@ -300,18 +301,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 return
             }
+            let transcribeDuration = -transcribeStart.timeIntervalSinceNow
 
             let rawText = text
             var llmFailed = false
             var llmError: String?
             var improvedText: String?
             var answerText: String?
+            var improveDuration: TimeInterval?
+            var answerDuration: TimeInterval?
 
             switch mode {
             case .copy:
                 break
             case .improve:
+                let llmStart = Date()
                 let result = runImproveWriting(text)
+                improveDuration = -llmStart.timeIntervalSinceNow
                 if let improved = result.text {
                     text = improved
                     improvedText = improved
@@ -320,7 +326,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     llmError = result.error
                 }
             case .answer:
+                let llmStart = Date()
                 let result = runAnswerQuestion(text)
+                answerDuration = -llmStart.timeIntervalSinceNow
                 if let answer = result.text {
                     text = answer
                     answerText = answer
@@ -355,7 +363,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                     raw: rawText, improved: improvedText,
                     improveError: mode == .improve ? llmError : nil,
                     answer: answerText,
-                    answerError: mode == .answer ? llmError : nil
+                    answerError: mode == .answer ? llmError : nil,
+                    rawDuration: transcribeDuration,
+                    improveDuration: improveDuration,
+                    answerDuration: answerDuration
                 )
                 self.popover.performClose(nil)
                 self.notify(title: label, body: preview)
@@ -379,6 +390,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let duration = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
             self.log.info("recorded \(String(format: "%.1f", duration))s by wall clock")
 
+            let transcribeStart = Date()
             guard let rawText = self.recorder.stop(), !rawText.isEmpty else {
                 self.log.warning("no text from transcription")
                 DispatchQueue.main.async {
@@ -388,14 +400,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 }
                 return
             }
+            let transcribeDuration = -transcribeStart.timeIntervalSinceNow
 
+            let answerStart = Date()
             let result = runAnswerQuestion(rawText)
+            let answerDuration = -answerStart.timeIntervalSinceNow
 
             DispatchQueue.main.async {
                 self.transcriptStore.addTranscript(
                     raw: rawText, improved: nil,
                     answer: result.text,
-                    answerError: result.error
+                    answerError: result.error,
+                    rawDuration: transcribeDuration,
+                    answerDuration: answerDuration
                 )
 
                 if let answer = result.text {

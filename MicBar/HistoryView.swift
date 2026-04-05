@@ -424,12 +424,12 @@ struct TranscriptCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             // Raw transcript
-            textBlock(label: record.source == .pasted ? "Pasted" : "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue)
+            textBlock(label: record.source == .pasted ? "Pasted" : "Transcript", text: rawBinding, copyValue: rawBinding.wrappedValue, duration: record.rawDuration)
 
             // Chain of operations
             ForEach(record.chain) { entry in
                 let binding = chainBinding(entryId: entry.id)
-                textBlock(label: entry.label, text: binding, copyValue: binding.wrappedValue)
+                textBlock(label: entry.label, text: binding, copyValue: binding.wrappedValue, duration: entry.duration)
             }
 
             // Pending operation
@@ -519,12 +519,19 @@ struct TranscriptCard: View {
         )
     }
 
-    private func textBlock(label: String, text: Binding<String>, copyValue: String) -> some View {
+    private func textBlock(label: String, text: Binding<String>, copyValue: String, duration: TimeInterval? = nil) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .textCase(.uppercase)
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                if let duration = duration {
+                    Text(Self.formatDuration(duration))
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                }
+            }
 
             HStack(alignment: .top, spacing: 8) {
                 AutoExpandingTextEditor(text: text)
@@ -544,6 +551,12 @@ struct TranscriptCard: View {
                 .animation(.easeInOut(duration: 0.15), value: copiedField)
             }
         }
+    }
+
+    private static func formatDuration(_ t: TimeInterval) -> String {
+        if t < 1 { return String(format: "%.0fms", t * 1000) }
+        if t < 10 { return String(format: "%.1fs", t) }
+        return String(format: "%.0fs", t)
     }
 
     private func copyText(_ text: String, field: String) {
