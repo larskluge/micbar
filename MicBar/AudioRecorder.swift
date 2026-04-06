@@ -1,22 +1,44 @@
 import AVFoundation
+import CoreAudio
 
 final class AudioRecorder {
-    private let engine = AVAudioEngine()
+    private var engine = AVAudioEngine()
     private var buffer = Data()
     private let log = Logger.shared
     private let lock = NSLock()
 
     var isRecording: Bool { engine.isRunning }
 
+    var inputDeviceName: String? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID) == noErr else {
+            return nil
+        }
+        var nameAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        size = UInt32(MemoryLayout<Unmanaged<CFString>>.size)
+        var unmanagedName: Unmanaged<CFString>?
+        guard AudioObjectGetPropertyData(deviceID, &nameAddress, 0, nil, &size, &unmanagedName) == noErr,
+              let cfName = unmanagedName?.takeUnretainedValue() else {
+            return nil
+        }
+        return cfName as String
+    }
+
     func start() throws {
         buffer = Data()
 
-        // Fully tear down previous session to avoid stale internal state
-        if engine.isRunning {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
-        engine.reset()
+        // Create a fresh engine each time to avoid stale tap/node state
+        engine = AVAudioEngine()
 
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
