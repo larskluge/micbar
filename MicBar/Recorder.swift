@@ -34,4 +34,5 @@ final class Recorder {
     }
 
     var isRunning: Bool { audioRecorder.isRecording }
+    var inputDeviceName: String? { audioRecorder.inputDeviceName }
 }

@@ -248,6 +248,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
             if self.recorder.start() {
+                self.popoverController.setInputDeviceName(self.recorder.inputDeviceName)
                 if showPopover {
                     self.showPopover()
                 }

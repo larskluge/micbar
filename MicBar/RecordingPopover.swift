@@ -16,6 +16,7 @@ class RecordingPopoverController: NSViewController {
     private var processingView: NSView!
 
     private var timerLabel: NSTextField!
+    private var deviceLabel: NSTextField!
     private var redDot: NSView!
     private var redDotGlow: NSView!
     private var displayTimer: Timer?
@@ -51,6 +52,12 @@ class RecordingPopoverController: NSViewController {
 
     func setRecordingStartTime(_ date: Date) {
         recordingStartTime = date
+    }
+
+    func setInputDeviceName(_ name: String?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.deviceLabel?.stringValue = name ?? "Unknown device"
+        }
     }
 
     private func showState(_ state: AppDelegateState) {
@@ -95,10 +102,12 @@ class RecordingPopoverController: NSViewController {
         let btnH: CGFloat = 36
         let btnGap: CGFloat = 8
         let statusH: CGFloat = 20
+        let deviceH: CGFloat = 14
+        let deviceGap: CGFloat = 2
         let statusGap: CGFloat = 10
         let cancelH: CGFloat = 16
         let cancelGap: CGFloat = 4
-        let totalH: CGFloat = pad + cancelH + cancelGap + btnH + btnGap + btnH + btnGap + btnH + statusGap + statusH + pad
+        let totalH: CGFloat = pad + cancelH + cancelGap + btnH + btnGap + btnH + btnGap + btnH + statusGap + deviceH + deviceGap + statusH + pad
 
         recordingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         recordingView.wantsLayer = true
@@ -146,6 +155,14 @@ class RecordingPopoverController: NSViewController {
         )
         stopCopyButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
         y += btnH + statusGap
+
+        // Device name row
+        deviceLabel = NSTextField(labelWithString: "")
+        deviceLabel.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: deviceH)
+        deviceLabel.font = .systemFont(ofSize: 10)
+        deviceLabel.textColor = .tertiaryLabelColor
+        deviceLabel.lineBreakMode = .byTruncatingTail
+        y += deviceH + deviceGap
 
         // Status row: red dot + "Recording" left, timer right
         let dotSize: CGFloat = 10
@@ -195,6 +212,7 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(redDot)
         recordingView.addSubview(recordingLabel)
         recordingView.addSubview(timerLabel)
+        recordingView.addSubview(deviceLabel)
         recordingView.addSubview(stopCopyButton)
         recordingView.addSubview(stopImproveButton)
         recordingView.addSubview(stopAnswerButton)
