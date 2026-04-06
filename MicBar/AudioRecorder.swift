@@ -11,6 +11,13 @@ final class AudioRecorder {
     func start() throws {
         buffer = Data()
 
+        // Fully tear down previous session to avoid stale internal state
+        if engine.isRunning {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+        engine.reset()
+
         let inputNode = engine.inputNode
         let hwFormat = inputNode.outputFormat(forBus: 0)
         log.info("audio input: \(hwFormat.sampleRate)Hz, \(hwFormat.channelCount)ch")
@@ -24,7 +31,6 @@ final class AudioRecorder {
             throw AudioRecorderError.converterFailed
         }
 
-        inputNode.removeTap(onBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] pcmBuffer, _ in
             guard let self = self else { return }
             self.convert(pcmBuffer, using: converter, targetFormat: targetFormat)
