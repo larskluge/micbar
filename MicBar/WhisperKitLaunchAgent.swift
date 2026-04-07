@@ -19,6 +19,8 @@ enum WhisperKitLaunchAgent {
             "ProgramArguments": [
                 "/opt/homebrew/bin/whisperkit-cli",
                 "serve",
+                "--host",
+                "127.0.0.1",
                 "--model-path",
                 "\(home)/Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-large-v3-v20240930",
             ],
