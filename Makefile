@@ -7,6 +7,7 @@ build:
 	mkdir -p $(APP_BUNDLE)/Contents/MacOS $(APP_BUNDLE)/Contents/Resources
 	cp .build/$(CONFIG)/$(APP_NAME) $(APP_BUNDLE)/Contents/MacOS/
 	cp -r .build/$(CONFIG)/MicBar_MicBar.bundle $(APP_BUNDLE)/Contents/Resources/
+	cp MicBar/Resources/AppIcon.icns $(APP_BUNDLE)/Contents/Resources/
 	cp MicBar/Info.plist $(APP_BUNDLE)/Contents/
 	codesign -s - --force $(APP_BUNDLE)
 	@echo "Built $(APP_BUNDLE)"

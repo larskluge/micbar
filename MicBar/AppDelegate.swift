@@ -475,6 +475,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
+
         let id = UUID().uuidString
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
