@@ -247,15 +247,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 self?.state = .recording
             }
 
-            if self.recorder.start() {
-                self.popoverController.setInputDeviceName(self.recorder.inputDeviceName)
-                if showPopover {
-                    self.showPopover()
+            self.recorder.start { [weak self] ok in
+                guard let self = self else { return }
+                if ok {
+                    self.popoverController.setInputDeviceName(self.recorder.inputDeviceName)
+                    if showPopover {
+                        self.showPopover()
+                    }
+                } else {
+                    self.log.warning("failed to start recording")
+                    self.state = .idle
+                    self.notify(title: "MicBar", body: "Failed to start recording — audio input may be stuck. Try quitting and reopening MicBar.")
                 }
-            } else {
-                self.log.warning("failed to start recording")
-                self.state = .idle
-                self.notify(title: "MicBar", body: "Failed to start recording")
             }
         }
     }
