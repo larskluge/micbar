@@ -115,6 +115,16 @@ class TranscriptStore: ObservableObject {
         }
     }
 
+    func rewrite(id: UUID) {
+        let useLocal = OllamaSettings.shared.effectiveUseLocal
+        runLLMOperation(id: id, pendingLabel: "Rewriting\(useLocal ? " locally" : "")...", chainLabel: "Rewritten") { input in
+            if useLocal {
+                return runOllamaCall(input, label: "rewrite-local", config: self.ollamaConfig(systemPrompt: RewriteConfig().systemPrompt))
+            }
+            return runRewrite(input)
+        }
+    }
+
     func summarize(id: UUID) {
         let useLocal = OllamaSettings.shared.effectiveUseLocal
         runLLMOperation(id: id, pendingLabel: "Summarizing\(useLocal ? " locally" : "")...", chainLabel: "Summary") { input in

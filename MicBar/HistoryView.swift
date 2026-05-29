@@ -478,6 +478,13 @@ struct TranscriptCard: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
+                    Button(action: { store.rewrite(id: record.id) }) {
+                        Text("Rewrite")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
                     Button(action: { store.summarize(id: record.id) }) {
                         Text("Summarize")
                             .font(.system(size: 11, weight: .medium))

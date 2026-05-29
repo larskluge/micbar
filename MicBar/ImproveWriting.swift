@@ -151,6 +151,39 @@ func runAnswerQuestion(
     return runLLMCall(text, label: "answer-question", config: llmConfig, client: client, log: log)
 }
 
+/// Configuration for the rewrite LLM call.
+struct RewriteConfig {
+    var url: String = "http://localhost:8317/v1/chat/completions"
+    var model: String = "claude-sonnet-4-6"
+    var systemPrompt: String = """
+        You are an expert editor. Detect which language the user's input is in and always respond in the same language. \
+        Return ONLY the rewritten text, nothing else — no XML tags, no explanations, no preamble.
+
+        The user has dictated raw, unstructured thoughts via voice — a brainstorm full of half-finished sentences, \
+        tangents, and repetition. Rewrite it into a single comprehensive, well-structured message in clear language. \
+        Bring together all the points raised; reorganize and merge them so the result flows well; remove filler and \
+        false starts. Preserve every distinct idea and the user's intent and tone. Do not add new ideas or information. \
+        The result should read like a thoughtful message written for another person.
+        """
+    var timeoutSeconds: TimeInterval = 60
+    var maxRetries: Int = 2
+}
+
+/// Calls the LLM proxy to rewrite raw dictation into a comprehensive message. Blocks the calling thread.
+func runRewrite(
+    _ text: String,
+    config: RewriteConfig = RewriteConfig(),
+    client: HTTPClient = URLSessionHTTPClient(),
+    log: Logger = .shared
+) -> ImproveResult {
+    let llmConfig = LLMCallConfig(
+        url: config.url, model: config.model,
+        systemPrompt: config.systemPrompt,
+        timeoutSeconds: config.timeoutSeconds, maxRetries: config.maxRetries
+    )
+    return runLLMCall(text, label: "rewrite", config: llmConfig, client: client, log: log)
+}
+
 /// Calls the LLM proxy to summarize the given text. Blocks the calling thread.
 func runSummarize(
     _ text: String,
