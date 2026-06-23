@@ -7,3 +7,4 @@ DerivedData/
 venv/
 __pycache__/
 com.aekym.micbar.plist
+.superpowers/
