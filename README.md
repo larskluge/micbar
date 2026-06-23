@@ -8,7 +8,7 @@ Built with Swift and AppKit. No Xcode IDE required.
 
 - Swift toolchain (`xcode-select --install`)
 - WhisperKit server on port 50060 — speech-to-text service (`brew install whisperkit-cli`)
-- LLM proxy on port 8317 — powers all LLM-based text operations, optional (`brew install cliproxyapi`)
+- Ollama on port 11434 — local LLM that powers all text operations, optional (`brew install ollama`)
 
 ## Building & Running
 
@@ -29,8 +29,10 @@ swift test
 A microphone icon appears in the menu bar. Click it to open a popover with a record button.
 
 - **Record** — starts native audio recording; icon shows a red recording indicator
-- **Stop & Copy** — stops recording, copies transcription to clipboard
-- **Stop, Improve & Copy** — stops recording, improves text via LLM, copies result to clipboard
+- **Copy** — stops recording, copies the transcription to the clipboard
+- **Paste** — stops recording, inserts the transcription at the cursor
+- **Edit…** — stops recording and opens the History window to apply text operations
+- **Answer** — treats the transcript as a question and answers it via the local LLM
 
 The popover also links to a **History & Settings** window where you can:
 

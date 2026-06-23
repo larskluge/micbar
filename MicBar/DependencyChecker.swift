@@ -30,7 +30,7 @@ final class DependencyChecker: ObservableObject {
         isChecking = true
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let results = [self.checkTranscription(), self.checkImproveWriting(), self.checkOllama()]
+            let results = [self.checkTranscription(), self.checkOllama()]
             DispatchQueue.main.async {
                 self.results = results
                 self.isChecking = false
@@ -47,19 +47,10 @@ final class DependencyChecker: ObservableObject {
         )
     }
 
-    private func checkImproveWriting() -> DependencyStatus {
-        return checkHTTP(
-            name: "LLM proxy :8317",
-            description: "Powers all LLM-based text operations. Optional.",
-            url: "http://localhost:8317/v1/models",
-            installCommand: "brew install cliproxyapi"
-        )
-    }
-
     private func checkOllama() -> DependencyStatus {
         return checkHTTP(
             name: "Local LLM (Ollama) :11434",
-            description: "Local language model for on-device text improvement. Optional.",
+            description: "Powers all LLM-based text operations. Optional.",
             url: "http://localhost:11434/api/tags",
             installCommand: "brew install ollama"
         )

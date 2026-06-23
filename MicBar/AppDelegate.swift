@@ -54,7 +54,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             self.log.info("notification auth: granted=\(granted) error=\(String(describing: error))")
         }
 
-        OllamaSettings.shared.probeAvailability()
         setupStatusItem()
         log.info("MicBar initialized")
     }
@@ -397,13 +396,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             let transcribeDuration = -transcribeStart.timeIntervalSinceNow
 
             let answerStart = Date()
-            let useLocal = OllamaSettings.shared.effectiveUseLocal
-            let result: ImproveResult
-            if useLocal {
-                result = runOllamaCall(rawText, label: "answer-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: AnswerQuestionConfig().systemPrompt))
-            } else {
-                result = runAnswerQuestion(rawText)
-            }
+            let result = runOllamaCall(rawText, label: "answer", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: AnswerQuestionConfig().systemPrompt))
             let answerDuration = -answerStart.timeIntervalSinceNow
 
             DispatchQueue.main.async {

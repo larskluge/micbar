@@ -106,7 +106,7 @@ struct SettingsTab: View {
 
                 AccessibilitySection()
 
-                LLMModeSection(settings: ollamaSettings)
+                LLMModelSection(settings: ollamaSettings)
 
                 Section("General") {
                     Toggle("Launch MicBar at Login", isOn: $loginEnabled)
@@ -136,7 +136,6 @@ struct SettingsTab: View {
         .onAppear {
             checker.checkAll()
             ollamaSettings.fetchModels()
-            ollamaSettings.probeAvailability()
             whisperKitAtLogin = WhisperKitLaunchAgent.isInstalled
         }
     }
@@ -213,50 +212,40 @@ struct AccessibilitySection: View {
     }
 }
 
-struct LLMModeSection: View {
+struct LLMModelSection: View {
     @ObservedObject var settings: OllamaSettings
 
     var body: some View {
-        Section("LLM") {
-            Picker("Mode", selection: $settings.useLocal) {
-                Label("Remote", systemImage: "cloud")
-                    .tag(false)
-                Label("Local (Ollama)", systemImage: "desktopcomputer")
-                    .tag(true)
-            }
-            .pickerStyle(.segmented)
-
-            if settings.useLocal {
-                HStack {
-                    if settings.isFetching {
-                        ProgressView().controlSize(.small)
-                        Text("Loading models...")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    } else if settings.availableModels.isEmpty {
-                        Text("No models found — is Ollama running?")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    } else {
-                        Picker("Model", selection: $settings.selectedModel) {
-                            if !settings.availableModels.contains(settings.selectedModel) {
-                                Text(settings.selectedModel).tag(settings.selectedModel)
-                            }
-                            ForEach(settings.availableModels, id: \.self) { model in
-                                Text(model).tag(model)
-                            }
+        Section("LLM (Ollama)") {
+            HStack {
+                if settings.isFetching {
+                    ProgressView().controlSize(.small)
+                    Text("Loading models...")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else if settings.availableModels.isEmpty {
+                    Text("No models found — is Ollama running?")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                } else {
+                    Picker("Model", selection: $settings.selectedModel) {
+                        if !settings.availableModels.contains(settings.selectedModel) {
+                            Text(settings.selectedModel).tag(settings.selectedModel)
+                        }
+                        ForEach(settings.availableModels, id: \.self) { model in
+                            Text(model).tag(model)
                         }
                     }
-
-                    Spacer()
-
-                    Button(action: { settings.fetchModels() }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
                 }
+
+                Spacer()
+
+                Button(action: { settings.fetchModels() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
         }
     }
@@ -453,7 +442,6 @@ struct TranscriptCard: View {
     let record: TranscriptRecord
     @ObservedObject var store: TranscriptStore
     @ObservedObject var languageSettings: LanguageSettings
-    @ObservedObject var ollamaSettings: OllamaSettings = .shared
     @State private var copiedField: String?
 
     private var rawBinding: Binding<String> {
@@ -500,20 +488,6 @@ struct TranscriptCard: View {
             // Action buttons (always at the bottom, operate on latest text)
             if !record.isBusy {
                 HStack(spacing: 8) {
-                    // Local/Remote toggle
-                    Button(action: { ollamaSettings.useLocal.toggle() }) {
-                        ZStack {
-                            Image(systemName: "desktopcomputer")
-                                .opacity(ollamaSettings.effectiveUseLocal ? 1 : 0)
-                            Image(systemName: "cloud")
-                                .opacity(ollamaSettings.effectiveUseLocal ? 0 : 1)
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .help(ollamaSettings.effectiveUseLocal ? "Using local LLM (Ollama)" : "Using remote LLM")
-
                     Button(action: { store.improveText(id: record.id) }) {
                         Text("Improve")
                             .font(.system(size: 11, weight: .medium))

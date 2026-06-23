@@ -96,52 +96,32 @@ class TranscriptStore: ObservableObject {
     }
 
     func improveText(id: UUID) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
-        runLLMOperation(id: id, pendingLabel: "Improving\(useLocal ? " locally" : "")...", chainLabel: "Improved") { input in
-            if useLocal {
-                return runOllamaCall(input, label: "improve-local", config: self.ollamaConfig(systemPrompt: ImproveWritingConfig().systemPrompt))
-            }
-            return runImproveWriting(input)
+        runLLMOperation(id: id, pendingLabel: "Improving...", chainLabel: "Improved") { input in
+            runOllamaCall(input, label: "improve", config: self.ollamaConfig(systemPrompt: ImproveWritingConfig().systemPrompt))
         }
     }
 
     func answerQuestion(id: UUID) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
-        runLLMOperation(id: id, pendingLabel: "Answering\(useLocal ? " locally" : "")...", chainLabel: "Answer") { input in
-            if useLocal {
-                return runOllamaCall(input, label: "answer-local", config: self.ollamaConfig(systemPrompt: AnswerQuestionConfig().systemPrompt))
-            }
-            return runAnswerQuestion(input)
+        runLLMOperation(id: id, pendingLabel: "Answering...", chainLabel: "Answer") { input in
+            runOllamaCall(input, label: "answer", config: self.ollamaConfig(systemPrompt: AnswerQuestionConfig().systemPrompt))
         }
     }
 
     func rewrite(id: UUID) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
-        runLLMOperation(id: id, pendingLabel: "Rewriting\(useLocal ? " locally" : "")...", chainLabel: "Rewritten") { input in
-            if useLocal {
-                return runOllamaCall(input, label: "rewrite-local", config: self.ollamaConfig(systemPrompt: RewriteConfig().systemPrompt))
-            }
-            return runRewrite(input)
+        runLLMOperation(id: id, pendingLabel: "Rewriting...", chainLabel: "Rewritten") { input in
+            runOllamaCall(input, label: "rewrite", config: self.ollamaConfig(systemPrompt: RewriteConfig().systemPrompt))
         }
     }
 
     func summarize(id: UUID) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
-        runLLMOperation(id: id, pendingLabel: "Summarizing\(useLocal ? " locally" : "")...", chainLabel: "Summary") { input in
-            if useLocal {
-                return runOllamaCall(input, label: "summarize-local", config: self.ollamaConfig(systemPrompt: SummarizeConfig().systemPrompt))
-            }
-            return runSummarize(input)
+        runLLMOperation(id: id, pendingLabel: "Summarizing...", chainLabel: "Summary") { input in
+            runOllamaCall(input, label: "summarize", config: self.ollamaConfig(systemPrompt: SummarizeConfig().systemPrompt))
         }
     }
 
     func keyPoints(id: UUID) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
-        runLLMOperation(id: id, pendingLabel: "Extracting key points\(useLocal ? " locally" : "")...", chainLabel: "Key Points") { input in
-            if useLocal {
-                return runOllamaCall(input, label: "keypoints-local", config: self.ollamaConfig(systemPrompt: KeyPointsConfig().systemPrompt))
-            }
-            return runKeyPoints(input)
+        runLLMOperation(id: id, pendingLabel: "Extracting key points...", chainLabel: "Key Points") { input in
+            runOllamaCall(input, label: "keypoints", config: self.ollamaConfig(systemPrompt: KeyPointsConfig().systemPrompt))
         }
     }
 
@@ -169,23 +149,17 @@ class TranscriptStore: ObservableObject {
     }
 
     func translate(id: UUID, language: String) {
-        let useLocal = OllamaSettings.shared.effectiveUseLocal
         guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
         let flag = LanguageSettings.flagForLanguage[language] ?? ""
         let chainLabel = "\(flag) \(language)"
-        records[idx].pendingLabel = "Translating to \(language)\(useLocal ? " locally" : "")..."
+        records[idx].pendingLabel = "Translating to \(language)..."
         records[idx].pendingError = nil
         let input = records[idx].latestText
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let start = Date()
-            let result: ImproveResult
-            if useLocal {
-                let prompt = TranslateConfig.systemPrompt(targetLanguage: language)
-                result = runOllamaCall(input, label: "translate-\(language.lowercased())-local", config: self?.ollamaConfig(systemPrompt: prompt) ?? OllamaConfig(systemPrompt: prompt))
-            } else {
-                result = runTranslate(input, targetLanguage: language)
-            }
+            let prompt = TranslateConfig.systemPrompt(targetLanguage: language)
+            let result = runOllamaCall(input, label: "translate-\(language.lowercased())", config: self?.ollamaConfig(systemPrompt: prompt) ?? OllamaConfig(systemPrompt: prompt))
             let elapsed = -start.timeIntervalSinceNow
             DispatchQueue.main.async {
                 guard let self = self,
