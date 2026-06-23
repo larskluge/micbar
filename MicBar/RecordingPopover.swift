@@ -3,7 +3,8 @@ import QuartzCore
 
 protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopCopy()
-    func popoverDidRequestStopImprove()
+    func popoverDidRequestStopPaste()
+    func popoverDidRequestStopEdit()
     func popoverDidRequestStopAnswer()
     func popoverDidRequestCancel()
     func popoverDidRequestOpenHistory()
@@ -98,75 +99,53 @@ class RecordingPopoverController: NSViewController {
     // MARK: - Recording View
 
     private func buildRecordingView() {
-        let pad: CGFloat = 16
-        let btnH: CGFloat = 36
-        let btnGap: CGFloat = 8
+        let pad: CGFloat = 14
+        let primaryH: CGFloat = 34
+        let secH: CGFloat = 46
+        let gap: CGFloat = 8
+        let deviceH: CGFloat = 13
+        let deviceGap: CGFloat = 9
         let statusH: CGFloat = 20
-        let deviceH: CGFloat = 14
-        let deviceGap: CGFloat = 2
-        let statusGap: CGFloat = 10
-        let cancelH: CGFloat = 16
-        let cancelGap: CGFloat = 4
-        let totalH: CGFloat = pad + cancelH + cancelGap + btnH + btnGap + btnH + btnGap + btnH + statusGap + deviceH + deviceGap + statusH + pad
+
+        let totalH: CGFloat = pad + secH + gap + primaryH + deviceGap + deviceH + deviceGap + statusH + pad
 
         recordingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         recordingView.wantsLayer = true
 
+        let contentW = W - pad * 2
+
+        // Build bottom → top (AppKit origin is bottom-left).
         var y = pad
 
-        // Cancel — plain text link
-        let cancelLabel = NSTextField(labelWithString: "Cancel")
-        cancelLabel.frame = NSRect(x: 0, y: y, width: W, height: cancelH)
-        cancelLabel.font = .systemFont(ofSize: 11)
-        cancelLabel.textColor = .tertiaryLabelColor
-        cancelLabel.alignment = .center
+        // Secondary action row: Paste / Edit… / Answer
+        let colGap: CGFloat = 7
+        let colW = (contentW - colGap * 2) / 3
+        let pasteButton = makeIconTile(title: "Paste", symbol: "text.insert", action: #selector(stopPasteClicked))
+        pasteButton.frame = NSRect(x: pad, y: y, width: colW, height: secH)
+        let editButton = makeIconTile(title: "Edit…", symbol: "square.and.pencil", action: #selector(stopEditClicked))
+        editButton.frame = NSRect(x: pad + colW + colGap, y: y, width: colW, height: secH)
+        let answerButton = makeIconTile(title: "Answer", symbol: "bubble.left", action: #selector(stopAnswerClicked))
+        answerButton.frame = NSRect(x: pad + (colW + colGap) * 2, y: y, width: colW, height: secH)
+        y += secH + gap
 
-        let cancelButton = NSButton(frame: NSRect(x: 0, y: y, width: W, height: cancelH))
-        cancelButton.title = ""
-        cancelButton.isTransparent = true
-        cancelButton.target = self
-        cancelButton.action = #selector(cancelClicked)
-        cancelButton.keyEquivalent = "\u{1b}"
-        y += cancelH + cancelGap
-
-        // Answer button
-        let stopAnswerButton = makeButton(
-            title: "Answer",
-            action: #selector(stopAnswerClicked),
-            isPrimary: false
-        )
-        stopAnswerButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
-        y += btnH + btnGap
-
-        // Improve button
-        let stopImproveButton = makeButton(
-            title: "Stop, Improve & Copy",
-            action: #selector(stopImproveClicked),
-            isPrimary: false
-        )
-        stopImproveButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
-        y += btnH + btnGap
-
-        // Primary button
-        let stopCopyButton = makeButton(
-            title: "Stop & Copy",
-            action: #selector(stopCopyClicked),
-            isPrimary: true
-        )
-        stopCopyButton.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: btnH)
-        y += btnH + statusGap
+        // Primary button: Copy
+        let stopCopyButton = makeButton(title: "Copy", action: #selector(stopCopyClicked), isPrimary: true)
+        stopCopyButton.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")
+        stopCopyButton.imagePosition = .imageLeading
+        stopCopyButton.frame = NSRect(x: pad, y: y, width: contentW, height: primaryH)
+        y += primaryH + deviceGap
 
         // Device name row
         deviceLabel = NSTextField(labelWithString: "")
-        deviceLabel.frame = NSRect(x: pad, y: y, width: W - pad * 2, height: deviceH)
+        deviceLabel.frame = NSRect(x: pad + 17, y: y, width: contentW - 17, height: deviceH)
         deviceLabel.font = .systemFont(ofSize: 10)
         deviceLabel.textColor = .tertiaryLabelColor
         deviceLabel.lineBreakMode = .byTruncatingTail
         y += deviceH + deviceGap
 
         // Status row: red dot + "Recording" left, timer right
-        let dotSize: CGFloat = 10
-        let glowSize: CGFloat = 24
+        let dotSize: CGFloat = 9
+        let glowSize: CGFloat = 22
         let dotCenterX = pad + glowSize / 2
         let dotCenterY = y + statusH / 2
 
@@ -180,7 +159,7 @@ class RecordingPopoverController: NSViewController {
         redDotGlow.layer?.cornerRadius = glowSize / 2
         redDotGlow.layer?.shadowColor = NSColor(red: 1.0, green: 0.15, blue: 0.15, alpha: 1.0).cgColor
         redDotGlow.layer?.shadowOffset = .zero
-        redDotGlow.layer?.shadowRadius = 8
+        redDotGlow.layer?.shadowRadius = 7
         redDotGlow.layer?.shadowOpacity = 0.9
 
         redDot = NSView(frame: NSRect(
@@ -191,19 +170,28 @@ class RecordingPopoverController: NSViewController {
         redDot.layer?.backgroundColor = NSColor(red: 1.0, green: 0.25, blue: 0.25, alpha: 1.0).cgColor
         redDot.layer?.cornerRadius = dotSize / 2
 
-        let labelX = pad + glowSize + 6
+        let labelX = pad + glowSize + 4
         let recordingLabel = NSTextField(labelWithString: "Recording")
-        recordingLabel.frame = NSRect(x: labelX, y: y, width: 100, height: statusH)
-        recordingLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        recordingLabel.frame = NSRect(x: labelX, y: y, width: 120, height: statusH)
+        recordingLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         recordingLabel.textColor = .labelColor
 
-        // History button — far right, nudged up to optically align with text
-        let iconW: CGFloat = 18
-        let settingsButton = makeSettingsButton()
-        settingsButton.frame = NSRect(x: W - pad - iconW, y: y + 2, width: iconW, height: statusH)
+        // Close (✕) — top-right corner, discards the recording
+        let closeSize: CGFloat = 18
+        let closeButton = NSButton(frame: NSRect(x: W - pad - closeSize, y: totalH - pad - closeSize, width: closeSize, height: closeSize))
+        closeButton.bezelStyle = .inline
+        closeButton.isBordered = false
+        closeButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: "Discard")
+        closeButton.imageScaling = .scaleProportionallyDown
+        closeButton.contentTintColor = .tertiaryLabelColor
+        closeButton.target = self
+        closeButton.action = #selector(cancelClicked)
+        closeButton.keyEquivalent = "\u{1b}"
 
+        // Timer — right side of status row, left of the ✕
+        let timerW: CGFloat = 50
         timerLabel = NSTextField(labelWithString: "0:00")
-        timerLabel.frame = NSRect(x: W - pad - iconW - 8 - 50, y: y, width: 50, height: statusH)
+        timerLabel.frame = NSRect(x: W - pad - closeSize - 8 - timerW, y: y, width: timerW, height: statusH)
         timerLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         timerLabel.textColor = .secondaryLabelColor
         timerLabel.alignment = .right
@@ -212,13 +200,12 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(redDot)
         recordingView.addSubview(recordingLabel)
         recordingView.addSubview(timerLabel)
+        recordingView.addSubview(closeButton)
         recordingView.addSubview(deviceLabel)
         recordingView.addSubview(stopCopyButton)
-        recordingView.addSubview(stopImproveButton)
-        recordingView.addSubview(stopAnswerButton)
-        recordingView.addSubview(cancelLabel)
-        recordingView.addSubview(cancelButton)
-        recordingView.addSubview(settingsButton)
+        recordingView.addSubview(pasteButton)
+        recordingView.addSubview(editButton)
+        recordingView.addSubview(answerButton)
 
         view.addSubview(recordingView)
     }
@@ -267,6 +254,25 @@ class RecordingPopoverController: NSViewController {
             button.bezelColor = .controlAccentColor
         }
 
+        return button
+    }
+
+    private func makeIconTile(title: String, symbol: String, action: Selector) -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.title = title
+        button.target = self
+        button.action = action
+        button.bezelStyle = .regularSquare
+        button.imagePosition = .imageAbove
+        button.imageHugsTitle = true
+        button.imageScaling = .scaleProportionallyDown
+        button.font = .systemFont(ofSize: 11)
+        if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: title) {
+            image.isTemplate = true
+            button.image = image.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+            )
+        }
         return button
     }
 
@@ -345,8 +351,12 @@ class RecordingPopoverController: NSViewController {
         delegate?.popoverDidRequestStopCopy()
     }
 
-    @objc private func stopImproveClicked() {
-        delegate?.popoverDidRequestStopImprove()
+    @objc private func stopPasteClicked() {
+        delegate?.popoverDidRequestStopPaste()
+    }
+
+    @objc private func stopEditClicked() {
+        delegate?.popoverDidRequestStopEdit()
     }
 
     @objc private func stopAnswerClicked() {

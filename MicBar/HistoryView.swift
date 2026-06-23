@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import ApplicationServices
 
 struct HistoryView: View {
     @ObservedObject var store: TranscriptStore
@@ -103,6 +104,8 @@ struct SettingsTab: View {
             Form {
                 DependenciesSection(checker: checker)
 
+                AccessibilitySection()
+
                 LLMModeSection(settings: ollamaSettings)
 
                 Section("General") {
@@ -166,6 +169,46 @@ struct SettingsTab: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.5) {
                 checker.checkAll()
             }
+        }
+    }
+}
+
+struct AccessibilitySection: View {
+    @State private var trusted = AXIsProcessTrusted()
+    private let refreshTimer = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Section("Permissions") {
+            HStack(spacing: 6) {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 6))
+                    .foregroundColor(trusted ? .green : .red)
+                    .padding(.top, -8)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Accessibility")
+                        .font(.system(size: 13, weight: .medium))
+                    Text("Required for Paste to insert the transcript where your cursor is. Without it, Paste falls back to copying.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                if !trusted {
+                    Button("Open Settings…") { openAccessibilitySettings() }
+                        .controlSize(.small)
+                }
+            }
+        }
+        .onReceive(refreshTimer) { _ in trusted = AXIsProcessTrusted() }
+    }
+
+    private func openAccessibilitySettings() {
+        TextInjector.requestAccessibility()
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
         }
     }
 }

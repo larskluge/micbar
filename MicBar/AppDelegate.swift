@@ -9,15 +9,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     private var answerPopoverController: AnswerPopoverController!
 
     private let recorder = Recorder()
+    private let textInjector = TextInjector()
     private let log = Logger.shared
     private var recordStartTime: Date?
     private var activity: NSObjectProtocol?
+
+    /// App that was frontmost when recording started — the paste target.
+    private var previousApp: NSRunningApplication?
 
     let transcriptStore = TranscriptStore()
     private lazy var historyWindowController = HistoryWindowController(
         store: transcriptStore,
         onRecord: { [weak self] in self?.startRecording(showPopover: false) },
-        onStop: { [weak self] in self?.stopAndFinish(mode: .copy) }
+        onStop: { [weak self] in self?.stopAndCopy() }
     )
 
     enum State {
@@ -154,11 +158,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     // MARK: - RecordingPopoverDelegate
 
     func popoverDidRequestStopCopy() {
-        stopAndFinish(mode: .copy)
+        stopAndCopy()
     }
 
-    func popoverDidRequestStopImprove() {
-        stopAndFinish(mode: .improve)
+    func popoverDidRequestStopPaste() {
+        stopAndPaste()
+    }
+
+    func popoverDidRequestStopEdit() {
+        stopAndOpenHistory()
     }
 
     func popoverDidRequestStopAnswer() {
@@ -181,6 +189,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             log.info("start: ignored, state=\(state)")
             return
         }
+
+        // Capture the focused app now, before MicBar activates and steals focus,
+        // so Paste can return the transcript to where the cursor was.
+        previousApp = textInjector.captureFrontmostApp()
 
         state = .waiting
         log.info("start: checking WhisperKit availability")
@@ -283,22 +295,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover.performClose(nil)
     }
 
-    private enum FinishMode {
-        case copy, improve, answer
-    }
-
-    private func stopAndFinish(mode: FinishMode) {
+    /// Stops recording and transcribes on a background queue. `completion` fires on
+    /// the main queue with the transcript; on no-speech it notifies and returns to idle.
+    private func stopAndTranscribe(_ completion: @escaping (_ text: String, _ duration: TimeInterval) -> Void) {
         state = .processing
-        log.info("stop called (mode=\(mode))")
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
-            let duration = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
-            self.log.info("recorded \(String(format: "%.1f", duration))s by wall clock")
+            let wall = self.recordStartTime.map { -$0.timeIntervalSinceNow } ?? 0
+            self.log.info("recorded \(String(format: "%.1f", wall))s by wall clock")
 
             let transcribeStart = Date()
-            guard var text = self.recorder.stop(), !text.isEmpty else {
+            guard let text = self.recorder.stop(), !text.isEmpty else {
                 self.log.warning("no text from transcription")
                 DispatchQueue.main.async {
                     self.notify(title: "Recording", body: "No speech detected")
@@ -308,89 +317,57 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
             let transcribeDuration = -transcribeStart.timeIntervalSinceNow
 
-            let rawText = text
-            var llmFailed = false
-            var llmError: String?
-            var improvedText: String?
-            var answerText: String?
-            var improveDuration: TimeInterval?
-            var answerDuration: TimeInterval?
+            DispatchQueue.main.async { completion(text, transcribeDuration) }
+        }
+    }
 
-            let useLocal = OllamaSettings.shared.effectiveUseLocal
+    private func stopAndCopy() {
+        log.info("stop: copy")
+        stopAndTranscribe { [weak self] text, duration in
+            guard let self = self else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            self.transcriptStore.addTranscript(raw: text, improved: nil, rawDuration: duration)
+            self.popover.performClose(nil)
+            self.notify(title: "Copied to clipboard", body: self.preview(text))
+            self.state = .idle
+        }
+    }
 
-            switch mode {
-            case .copy:
-                break
-            case .improve:
-                let llmStart = Date()
-                let result: ImproveResult
-                if useLocal {
-                    result = runOllamaCall(text, label: "improve-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: ImproveWritingConfig().systemPrompt))
-                } else {
-                    result = runImproveWriting(text)
-                }
-                improveDuration = -llmStart.timeIntervalSinceNow
-                if let improved = result.text {
-                    text = improved
-                    improvedText = improved
-                } else {
-                    llmFailed = true
-                    llmError = result.error
-                }
-            case .answer:
-                let llmStart = Date()
-                let result: ImproveResult
-                if useLocal {
-                    result = runOllamaCall(text, label: "answer-local", config: OllamaConfig(model: OllamaSettings.shared.selectedModel, systemPrompt: AnswerQuestionConfig().systemPrompt))
-                } else {
-                    result = runAnswerQuestion(text)
-                }
-                answerDuration = -llmStart.timeIntervalSinceNow
-                if let answer = result.text {
-                    text = answer
-                    answerText = answer
-                } else {
-                    llmFailed = true
-                    llmError = result.error
-                }
-            }
+    private func stopAndOpenHistory() {
+        log.info("stop: edit (open history)")
+        stopAndTranscribe { [weak self] text, duration in
+            guard let self = self else { return }
+            self.transcriptStore.addTranscript(raw: text, improved: nil, rawDuration: duration)
+            self.popover.performClose(nil)
+            self.historyWindowController.showWindow(tab: 0)
+            self.state = .idle
+        }
+    }
 
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
+    private func stopAndPaste() {
+        log.info("stop: paste at cursor")
+        let target = previousApp
 
-            let preview = text.count > 80 ? String(text.prefix(80)) + "..." : text
-            let label: String
-            if llmFailed {
-                switch mode {
-                case .improve: label = "Improve failed — raw transcript copied"
-                case .answer: label = "Answer failed — raw transcript copied"
-                case .copy: label = "Copied to clipboard"
-                }
-            } else {
-                switch mode {
-                case .copy: label = "Copied to clipboard"
-                case .improve: label = "Improved & copied to clipboard"
-                case .answer: label = "Answer copied to clipboard"
-                }
-            }
+        // Surface the system Accessibility prompt up front if not yet granted.
+        if !TextInjector.hasAccessibility() {
+            TextInjector.requestAccessibility()
+        }
 
-            DispatchQueue.main.async {
-                self.transcriptStore.addTranscript(
-                    raw: rawText, improved: improvedText,
-                    improveError: mode == .improve ? llmError : nil,
-                    answer: answerText,
-                    answerError: mode == .answer ? llmError : nil,
-                    rawDuration: transcribeDuration,
-                    improveDuration: improveDuration,
-                    answerDuration: answerDuration
-                )
-                self.popover.performClose(nil)
-                self.notify(title: label, body: preview)
-                self.log.info("copied to clipboard, notified")
+        stopAndTranscribe { [weak self] text, duration in
+            guard let self = self else { return }
+            self.transcriptStore.addTranscript(raw: text, improved: nil, rawDuration: duration)
+            self.popover.performClose(nil)
+            self.textInjector.inject(text, into: target) { result in
+                self.notify(title: result.notificationTitle, body: self.preview(text))
+                self.log.info("paste finished: \(result)")
                 self.state = .idle
             }
         }
+    }
+
+    private func preview(_ text: String) -> String {
+        text.count > 80 ? String(text.prefix(80)) + "..." : text
     }
 
     private func stopAndAnswer() {
