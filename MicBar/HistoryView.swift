@@ -523,6 +523,13 @@ struct TranscriptCard: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
 
+                    Button(action: { store.draftMailReply(id: record.id) }) {
+                        Text("Draft mail reply")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
                     ForEach(languageSettings.orderedSelectedLanguages) { lang in
                         Button(action: { store.translate(id: record.id, language: lang.name) }) {
                             Text(lang.flag)

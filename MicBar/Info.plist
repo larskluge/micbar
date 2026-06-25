@@ -22,5 +22,7 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>MicBar uses the microphone for speech-to-text recording.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>MicBar reads the open Gmail thread in Google Chrome to draft an email reply.</string>
 </dict>
 </plist>

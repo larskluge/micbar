@@ -172,6 +172,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         stopAndAnswer()
     }
 
+    func popoverDidRequestStopEmailReply() {
+        stopAndEmailReply()
+    }
+
     func popoverDidRequestCancel() {
         cancelRecording()
     }
@@ -367,6 +371,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     private func preview(_ text: String) -> String {
         text.count > 80 ? String(text.prefix(80)) + "..." : text
+    }
+
+    /// Transcribes, then reads the open Gmail thread and sends a draft-reply prompt
+    /// to Kubera via the local `tg`. The transcript is always saved; Chrome read and
+    /// `tg` send run off the main queue. Nothing is ever auto-sent — Kubera only drafts.
+    private func stopAndEmailReply() {
+        log.info("stop: draft mail reply")
+        stopAndTranscribe { [weak self] text, duration in
+            guard let self = self else { return }
+            self.transcriptStore.addTranscript(raw: text, improved: nil, rawDuration: duration)
+            self.popover.performClose(nil)
+
+            // Stay in .processing while we read Chrome and hand off to Kubera.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = EmailReplyBridge.draftReply(transcript: text)
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let thread):
+                        let subject = thread.subject.isEmpty ? "your thread" : "“\(thread.subject)”"
+                        self.notify(title: "Sent to Kubera", body: "Drafting your reply to \(subject).")
+                    case .failure(let error):
+                        self.notify(title: "Draft mail reply", body: error.message)
+                    }
+                    self.state = .idle
+                }
+            }
+        }
     }
 
     private func stopAndAnswer() {

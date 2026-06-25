@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import UserNotifications
 
 struct ChainEntry: Identifiable, Equatable {
     let id: UUID
@@ -146,6 +147,44 @@ class TranscriptStore: ObservableObject {
                 self.records[idx].pendingLabel = nil
             }
         }
+    }
+
+    /// Sends the card's latest text to Kubera as a Gmail draft-reply prompt (reads the
+    /// open Gmail thread). Unlike the LLM ops this produces no chain entry — Kubera drafts
+    /// asynchronously and confirms in Telegram. Success notifies; failure shows inline.
+    func draftMailReply(id: UUID) {
+        guard let idx = records.firstIndex(where: { $0.id == id }) else { return }
+        let input = records[idx].latestText
+        guard !input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            records[idx].pendingError = "Nothing to send."
+            return
+        }
+        records[idx].pendingLabel = "Drafting mail reply..."
+        records[idx].pendingError = nil
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = EmailReplyBridge.draftReply(transcript: input)
+            DispatchQueue.main.async {
+                guard let self = self,
+                      let idx = self.records.firstIndex(where: { $0.id == id }) else { return }
+                self.records[idx].pendingLabel = nil
+                switch result {
+                case .success(let thread):
+                    let subject = thread.subject.isEmpty ? "your thread" : "“\(thread.subject)”"
+                    self.notify(title: "Sent to Kubera", body: "Drafting your reply to \(subject).")
+                case .failure(let error):
+                    self.records[idx].pendingError = error.message
+                }
+            }
+        }
+    }
+
+    private func notify(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 
     func translate(id: UUID, language: String) {

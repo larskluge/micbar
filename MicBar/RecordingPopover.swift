@@ -6,6 +6,7 @@ protocol RecordingPopoverDelegate: AnyObject {
     func popoverDidRequestStopPaste()
     func popoverDidRequestStopEdit()
     func popoverDidRequestStopAnswer()
+    func popoverDidRequestStopEmailReply()
     func popoverDidRequestCancel()
     func popoverDidRequestOpenHistory()
 }
@@ -107,7 +108,9 @@ class RecordingPopoverController: NSViewController {
         let deviceGap: CGFloat = 9
         let statusH: CGFloat = 20
 
-        let totalH: CGFloat = pad + secH + gap + primaryH + deviceGap + deviceH + deviceGap + statusH + pad
+        let mailH: CGFloat = 30
+
+        let totalH: CGFloat = pad + secH + gap + mailH + gap + primaryH + deviceGap + deviceH + deviceGap + statusH + pad
 
         recordingView = NSView(frame: NSRect(x: 0, y: 0, width: W, height: totalH))
         recordingView.wantsLayer = true
@@ -127,6 +130,13 @@ class RecordingPopoverController: NSViewController {
         let answerButton = makeIconTile(title: "Answer", symbol: "bubble.left", action: #selector(stopAnswerClicked))
         answerButton.frame = NSRect(x: pad + (colW + colGap) * 2, y: y, width: colW, height: secH)
         y += secH + gap
+
+        // Draft mail reply — full-width secondary action (speak a reply → Gmail draft)
+        let emailReplyButton = makeButton(title: "Draft mail reply", action: #selector(stopEmailReplyClicked), isPrimary: false)
+        emailReplyButton.image = NSImage(systemSymbolName: "envelope", accessibilityDescription: "Draft mail reply")
+        emailReplyButton.imagePosition = .imageLeading
+        emailReplyButton.frame = NSRect(x: pad, y: y, width: contentW, height: mailH)
+        y += mailH + gap
 
         // Primary button: Copy
         let stopCopyButton = makeButton(title: "Copy", action: #selector(stopCopyClicked), isPrimary: true)
@@ -206,6 +216,7 @@ class RecordingPopoverController: NSViewController {
         recordingView.addSubview(pasteButton)
         recordingView.addSubview(editButton)
         recordingView.addSubview(answerButton)
+        recordingView.addSubview(emailReplyButton)
 
         view.addSubview(recordingView)
     }
@@ -361,6 +372,10 @@ class RecordingPopoverController: NSViewController {
 
     @objc private func stopAnswerClicked() {
         delegate?.popoverDidRequestStopAnswer()
+    }
+
+    @objc private func stopEmailReplyClicked() {
+        delegate?.popoverDidRequestStopEmailReply()
     }
 
     @objc private func cancelClicked() {
