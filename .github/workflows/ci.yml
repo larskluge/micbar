@@ -9,15 +9,15 @@ on:
 
 jobs:
   build-and-test:
-    # push, workflow_dispatch and same-repo PRs run on tart-ci, the self-hosted
-    # on-demand Tart runner; any other PR (a fork's, or one whose head repo was
-    # deleted) goes to the free hosted runner. This routing only spares fork PRs
+    # An allowlist: push, workflow_dispatch and same-repo PRs run on tart-ci, the
+    # self-hosted on-demand Tart runner; anything else (a fork's PR, one whose head
+    # repo was deleted, any event added later) goes to the free hosted runner. This routing only spares fork PRs
     # the approval step -- it is no security boundary, since a fork PR runs the
     # fork's copy of this file. The boundary is the repo's fork-PR approval
     # policy, which must stay `all_external_contributors` while this repo uses
     # tart, plus tart-ci-demand refusing fork runs (~/code/tart-ci README,
     # "Adding a repo").
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","macOS","arm64","tart"]') || fromJSON('["macos-latest"]') }}
+    runs-on: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON('["self-hosted","macOS","arm64","tart"]') || fromJSON('["macos-latest"]') }}
     timeout-minutes: 15
 
     steps:
