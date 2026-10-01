@@ -1,5 +1,9 @@
 # micbar
 
+> **Deprecated (2026-10-01).** MicBar is retired and superseded by
+> [Verso](https://github.com/larskluge/verso). It is no longer developed or
+> maintained; this repository is kept for reference only.
+
 Native macOS menu bar app for speech-to-text. Click to record, stop to get a transcription on your clipboard. Optionally process through LLM-powered text operations before copying.
 
 Built with Swift and AppKit. No Xcode IDE required.
